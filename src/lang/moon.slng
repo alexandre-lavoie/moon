@@ -1,0 +1,48 @@
+ws!       : [\s\r\t]
+comment!  : '%' (commentc)*
+
+commentc  : [\x00-\x09] | [\x11-\x12] | [\x14-\xFF] 
+digit     : [0-9]
+letter    : [a-z A-Z] | '_'
+eol       : '\r' ('\n')? | '\n'
+
+opcodez   : 'nop' | 'hlt' | 'entry' | 'align'
+opcodero  : 'lw' | 'lb'
+opcodeor  : 'sw' | 'sb'
+opcoderh  : 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'and' | 'or' | 'ceq' | 'cne' | 'clt' | 'cle' | 'cgt' | 'cge'
+opcoderw  : 'not' | 'jlr'
+opcoderwc : 'addi' | 'subi' | 'muli' | 'divi' | 'modi' | 'andi' | 'ori' | 'ceqi' | 'cnei' | 'clti' | 'clei' | 'cgti' | 'cgei'
+opcoderc  : 'sl' | 'sr' | 'bz' | 'bnz' | 'jl'
+opcoder   : 'getc' | 'putc' | 'jr'
+opcodec   : 'j' | 'org' | 'res'
+opcodecm  : 'dw' | 'db'
+
+register  : ('r' | 'R') digit (digit)?
+number    : ('+' | '-')? (digit)+
+stringc   : [\x00-\xFF]
+string    : '\"' (stringc)*? '\"'
+symbol    : letter (letter | digit)*
+
+START     : Program
+
+Symbol    : (symbol)& 0
+Reference : (symbol)& 0
+Register  : (register)& 0
+Number    : (number)& 0
+String    : (string)& 0
+
+Program   : (Line)* 0
+Line      : (Symbol 0)* (Instr 1)? (comment | eol)
+Offset    : Constant 0 ('(' Register ')' 1)?
+Constant  : (Number | Reference) 0
+Instr     : InstrZ | InstrRO | InstrOR | InstrRh | InstrRw | InstrRwC | InstrRC | InstrR | InstrC | InstrCm
+InstrZ    : (opcodez)& 0
+InstrR    : (opcoder)& 0 Register 1
+InstrRO   : (opcodero)& 0 Register 1 ',' Offset 2
+InstrRC   : (opcoderc)& 0 Register 1 ',' Constant 2
+InstrRw   : (opcoderw)& 0 Register 1 ',' Register 2
+InstrRwC  : (opcoderwc)& 0 Register 1 ',' Register 2 ',' Constant 3
+InstrRh   : (opcoderh)& 0 Register 1 ',' Register 2 ',' Register 3
+InstrOR   : (opcodeor)& 0 Offset 1 ',' Register 2
+InstrC    : (opcodec)& 0 Constant 1
+InstrCm   : (opcodecm)& 0 (Constant | String) (',' (Constant | String))* 1
