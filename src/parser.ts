@@ -1,5 +1,6 @@
 import * as moonJSON from "./lang/moon.json";
-import { ADDRESS_SIZE, MoonOp, opFromString } from "./op";
+import { ADDRESS_SIZE, MEMORY } from './config';
+import { MoonOp, opFromString } from "./op";
 import { AST, ASTNode, BranchNode, DerivationEnter, DerivationEntry, DerivationExit, DerivationToken, FA, Grammar, GrammarEnd, GrammarSymbol, GrammarTerminal, ParseTable, Token, TokenNode, Visitor, VisitorData } from "./utils";
 
 export class MoonParser {
@@ -209,6 +210,10 @@ class MoonType extends Visitor<MoonSymbol> {
         this.offset = 0;
     }
 
+    protected exit(data: MoonSymbol): void {
+        data.symbols["topaddr"] = MEMORY * 4;
+    }
+
     protected elseExit(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
         let node = ast.node(index);
 
@@ -253,8 +258,10 @@ class MoonType extends Visitor<MoonSymbol> {
 export class MoonData extends VisitorData {
     public entry?: number;
     public registers: number[];
-    public instructions: [number, number][];
+    public bytes: [number, number][];
+    public words: [number, number][];
     public constants: number[];
+    public symbols?: MoonSymbol;
 
     public static offset: number = 0;
 
@@ -262,8 +269,10 @@ export class MoonData extends VisitorData {
         super();
         this.entry = null;
         this.registers = [];
-        this.instructions = [];
+        this.bytes = [];
+        this.words = [];
         this.constants = [];
+        this.symbols = null;
     }
 
     public popRegisters(): number[] {
@@ -280,20 +289,21 @@ export class MoonData extends VisitorData {
 
     public pushInstrA(op: MoonOp, ri: number, rj: number, rk: number) {
         let instr = (op as number) << 26 | ri << 22 | rj << 18 | rk << 14;
-        this.instructions.push([MoonData.offset, instr]);
+        this.words.push([MoonData.offset, instr]);
         MoonData.offset += ADDRESS_SIZE;
     }
 
     public pushInstrB(op: MoonOp, ri: number, rj: number, k: number) {
         let instr = (op as number) << 26 | ri << 22 | rj << 18 | k & 0xFFFF;
-        this.instructions.push([MoonData.offset, instr]);
+        this.words.push([MoonData.offset, instr]);
         MoonData.offset += ADDRESS_SIZE;
     }
 
     protected mergeOne<T extends this>(other: T) {
         if(this.entry === null) this.entry = other.entry;
         this.registers = [...this.registers, ...other.registers];
-        this.instructions = [...this.instructions, ...other.instructions];
+        this.bytes = [...this.bytes, ...other.bytes];
+        this.words = [...this.words, ...other.words];
         this.constants = [...this.constants, ...other.constants];
     }
 }
@@ -308,6 +318,10 @@ class MoonGenerator extends Visitor<MoonData> {
 
     protected enter(ast: AST): void {
         MoonData.offset = 0;
+    }
+
+    protected exit(data: MoonData): void {
+        data.symbols = this.symbols;
     }
 
     protected elseExit(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
@@ -332,7 +346,21 @@ class MoonGenerator extends Visitor<MoonData> {
 
         let symbol = ast.lexeme(ast.child(index, 0));
         let offset = this.symbols.symbols[symbol];
+
+        if(offset == null) throw new Error(`No symbol ${symbol}.`);
+
         data.constants.push(offset);
+
+        return data;
+    }
+
+    protected exitString(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
+        let data = new MoonData().merge(tree);
+
+        let string = ast.lexeme(ast.child(index, 0));
+        for(let i = 1; i < string.length - 1; i++) {
+            data.constants.push(string.charCodeAt(i));
+        }
 
         return data;
     }
@@ -381,10 +409,10 @@ class MoonGenerator extends Visitor<MoonData> {
         let data = new MoonData().merge(tree);
 
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
-        let [ri] = data.popRegisters();
+        let [ri, rj] = data.popRegisters();
         let [o] = data.popConstants();
 
-        data.pushInstrB(op, ri, 0, o);
+        data.pushInstrB(op, ri, rj, o);
 
         return data;
     }
@@ -435,19 +463,19 @@ class MoonGenerator extends Visitor<MoonData> {
         return data;
     }
 
-    protected InstrOR(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
+    protected exitInstrOR(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
         let data = new MoonData().merge(tree);
 
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
-        let [ri] = data.popRegisters();
+        let [rj, ri] = data.popRegisters();
         let [o] = data.popConstants();
 
-        data.pushInstrB(op, ri, 0, o);
+        data.pushInstrB(op, ri, rj, o);
 
         return data;
     }
 
-    protected InstrC(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
+    protected exitInstrC(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
         let data = new MoonData().merge(tree);
 
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
@@ -468,16 +496,24 @@ class MoonGenerator extends Visitor<MoonData> {
         return data;
     }
 
-    protected InstrCm(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
+    protected exitInstrCm(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
         let data = new MoonData().merge(tree);
 
-        // TODO
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
+        let constants = data.popConstants();
 
         switch(op) {
             case MoonOp.dw:
+                for(let c of constants) {
+                    data.words.push([MoonData.offset, c]);
+                    MoonData.offset += ADDRESS_SIZE;
+                }
                 break;
             case MoonOp.db:
+                for(let c of constants) {
+                    data.bytes.push([MoonData.offset, c]);
+                    MoonData.offset += 1;
+                }
                 break;
         }
 

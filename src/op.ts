@@ -1,5 +1,3 @@
-export const ADDRESS_SIZE = 4;
-
 export enum MoonOp {
     bad, lw, lb, sw, sb, add, sub, mul, div, mod,
     and, or, not, ceq, cne, clt, cle, cgt, cge,
