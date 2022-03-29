@@ -1,9 +1,16 @@
-import { MoonOp } from "./op";
-import { ADDRESS_SIZE, MEMORY } from "./config";
-import { MoonData } from "./parser";
+import { MoonOp, wordToInstr } from "../op";
+import Config from "../config";
+import { MoonData } from "../parser";
 
 export abstract class VMMutation {}
-export class OutputModify extends VMMutation {}
+export class OutputModify extends VMMutation {
+    public addition: string;
+
+    constructor(addition: string) {
+        super();
+        this.addition = addition;
+    }
+}
 export class RegisterModify extends VMMutation {
     public register: number;
     public current: number;
@@ -47,6 +54,7 @@ export abstract class MoonVM {
     private pc: number;
     private registers: number[];
     private memory: Uint8Array;
+    protected config: Config;
     protected data: MoonData;
     protected history: VMMutation[];
     protected step: boolean;
@@ -55,17 +63,18 @@ export abstract class MoonVM {
     protected abstract enter(): void;
     protected abstract exit(): void;
     protected abstract getc(): Promise<number>;
-    protected abstract putc(value: number): void;
+    protected abstract putc(value: string): void;
     protected abstract debug(): Promise<void>;
 
-    constructor(data: MoonData) {
+    constructor(config: Config, data: MoonData) {
         this.data = data;
+        this.config = config;
     }
 
     protected init() {
         this.pc = this.data.entry;
         this.registers = new Array(16).fill(0);
-        this.memory = new Uint8Array(new Array(MEMORY).fill(0));
+        this.memory = new Uint8Array(new Array(this.config.memorySize).fill(0));
         this.history = [];
         this.breakpoints = new Set<number>();
         this.step = true;
@@ -101,8 +110,8 @@ export abstract class MoonVM {
 
     private setWord(address: number, word: number, trace: boolean=true): boolean {
         if(trace) this.trace(new WordModify(address, word));
-        for(let i = 0; i < ADDRESS_SIZE; i++) this.memory[address + ADDRESS_SIZE - i - 1] = (word >> (i * 8)) & 0xFF;
-        if(trace && address < MoonData.offset) {
+        for(let i = 0; i < this.config.addressSize; i++) this.memory[address + this.config.addressSize - i - 1] = (word >> (i * 8)) & 0xFF;
+        if(trace && address < this.data.offset) {
             this.history.push(new ErrorModify(`Overwrote instruction at ${address} with ${word}`));
             return false;
         }
@@ -111,14 +120,14 @@ export abstract class MoonVM {
 
     private loadWord(address: number): number {
         let value = 0;
-        for(let i = 0; i < ADDRESS_SIZE; i++) value |= this.memory[address + ADDRESS_SIZE - i - 1] << (i * 8);
+        for(let i = 0; i < this.config.addressSize; i++) value |= this.memory[address + this.config.addressSize - i - 1] << (i * 8);
         return value;
     }
 
     private setByte(address: number, byte: number, trace: boolean=true): boolean {
         if(trace) this.trace(new ByteModify(address, byte));
         this.memory[address] = byte & 0xFF;
-        if(trace && address < MoonData.offset) {
+        if(trace && address < this.data.offset) {
             this.history.push(new ErrorModify(`Overwrote instruction at ${address} with ${byte}`));
             return false;
         }
@@ -130,40 +139,32 @@ export abstract class MoonVM {
     }
 
     protected async next(): Promise<boolean> {
-        let inst: number = this.loadWord(this.pc);
-
-        let op: MoonOp = (inst >>> 26) & 0b111111;
-        let ri: number = (inst >>> 22) & 0b1111;
-        let rj: number = (inst >>> 18) & 0b1111;
-        let rk: number = (inst >>> 14) & 0b1111;
-        let k: number  = (inst >>> 0)  & 0b11111111_11111111;
-
-        // TODO: Check edge condition.
-        let sk = (k > 32768) ? k - 65536 : k;
+        let word: number = this.loadWord(this.pc);
+        let [op, ri, rj, rk, k] = wordToInstr(this.config, word);
 
         switch(op) {
             case MoonOp.bad:
                 this.history.push(new ErrorModify(`Bad at ${this.pc}`));
                 return false;
             case MoonOp.lw:
-                if(this.registers[rj] + sk < MoonData.offset) {
-                    this.history.push(`Read from invalid address ${this.registers[rj] + sk}`);
+                if(this.registers[rj] + k < this.data.offset) {
+                    this.history.push(`Read from invalid address ${this.registers[rj] + k}`);
                     return false;
                 }
-                this.setRegister(ri, this.loadWord(this.registers[rj] + sk));
+                this.setRegister(ri, this.loadWord(this.registers[rj] + k));
                 break;
             case MoonOp.lb:
-                if(this.registers[rj] + sk < MoonData.offset) {
-                    this.history.push(`Read from invalid address ${this.registers[rj] + sk}`);
+                if(this.registers[rj] + k < this.data.offset) {
+                    this.history.push(`Read from invalid address ${this.registers[rj] + k}`);
                     return false;
                 }
-                this.setRegister(ri, this.loadByte(this.registers[rj] + sk));
+                this.setRegister(ri, this.loadByte(this.registers[rj] + k));
                 break;
             case MoonOp.sw:
-                if(!this.setWord(this.registers[rj] + sk, this.registers[ri])) return false;
+                if(!this.setWord(this.registers[rj] + k, this.registers[ri])) return false;
                 break;
             case MoonOp.sb:
-                if(!this.setByte(this.registers[rj] + sk, this.registers[ri])) return false;
+                if(!this.setByte(this.registers[rj] + k, this.registers[ri])) return false;
                 break;
             case MoonOp.add:
                 this.setRegister(ri, this.registers[rj] + this.registers[rk]);
@@ -208,56 +209,61 @@ export abstract class MoonVM {
                 this.setRegister(ri, (this.registers[rj] >= this.registers[rk]) ? 1 : 0);
                 break;
             case MoonOp.addi:
-                this.setRegister(ri, this.registers[rj] + sk);
+                this.setRegister(ri, this.registers[rj] + k);
                 break;
             case MoonOp.subi:
-                this.setRegister(ri, this.registers[rj] - sk);
+                this.setRegister(ri, this.registers[rj] - k);
                 break;
             case MoonOp.muli:
-                this.setRegister(ri, this.registers[rj] * sk);
+                this.setRegister(ri, this.registers[rj] * k);
                 break;
             case MoonOp.divi:
-                this.setRegister(ri, Math.trunc(this.registers[rj] / sk));
+                this.setRegister(ri, Math.trunc(this.registers[rj] / k));
                 break;
             case MoonOp.modi:
-                this.setRegister(ri, Math.trunc(this.registers[rj] % sk));
+                this.setRegister(ri, Math.trunc(this.registers[rj] % k));
                 break;
             case MoonOp.andi:
-                this.setRegister(ri, this.registers[rj] & sk);
+                this.setRegister(ri, this.registers[rj] & k);
                 break;
             case MoonOp.ori:
-                this.setRegister(ri, this.registers[rj] | sk);
+                this.setRegister(ri, this.registers[rj] | k);
                 break;
             case MoonOp.ceqi:
-                this.setRegister(ri, (this.registers[rj] === sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] === k) ? 1 : 0);
                 break;
             case MoonOp.cnei:
-                this.setRegister(ri, (this.registers[rj] !== sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] !== k) ? 1 : 0);
                 break;
             case MoonOp.clti:
-                this.setRegister(ri, (this.registers[rj] < sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] < k) ? 1 : 0);
                 break;
             case MoonOp.clei:
-                this.setRegister(ri, (this.registers[rj] <= sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] <= k) ? 1 : 0);
                 break;
             case MoonOp.cgti:
-                this.setRegister(ri, (this.registers[rj] > sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] > k) ? 1 : 0);
                 break;
             case MoonOp.cgei:
-                this.setRegister(ri, (this.registers[rj] >= sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] >= k) ? 1 : 0);
                 break;
             case MoonOp.sl:
-                this.setRegister(ri, (this.registers[rj] << sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] << k) ? 1 : 0);
                 break;
             case MoonOp.sr:
-                this.setRegister(ri, (this.registers[rj] >> sk) ? 1 : 0);
+                this.setRegister(ri, (this.registers[rj] >> k) ? 1 : 0);
                 break;
             case MoonOp.gtc:
                 this.setRegister(ri, await this.getc());
                 break;
             case MoonOp.ptc:
-                this.history.push(new OutputModify());
-                this.putc(this.registers[ri]);
+                let value = this.registers[ri];
+
+                let valueStr = `\\u${value}`;
+                if(value <= 127) valueStr = String.fromCharCode(value);
+
+                this.history.push(new OutputModify(valueStr));
+                this.putc(valueStr);
                 break;
             case MoonOp.bz:
                 if(this.registers[ri] === 0) {
@@ -278,11 +284,11 @@ export abstract class MoonVM {
                 this.setPC(this.registers[ri]);
                 return true;
             case MoonOp.jl:
-                this.setRegister(ri, this.pc + ADDRESS_SIZE);
+                this.setRegister(ri, this.pc + this.config.addressSize);
                 this.setPC(k);
                 return true;
             case MoonOp.jlr:
-                this.setRegister(ri, this.pc + ADDRESS_SIZE);
+                this.setRegister(ri, this.pc + this.config.addressSize);
                 this.setPC(this.registers[rj]);
                 return true;
             case MoonOp.nop:
@@ -291,7 +297,7 @@ export abstract class MoonVM {
                 return false;
         }
 
-        this.pc += ADDRESS_SIZE;
+        this.pc += this.config.addressSize;
 
         return true;
     }

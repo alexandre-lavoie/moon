@@ -1,14 +1,16 @@
+import Config from "./config";
 import * as moonJSON from "./lang/moon.json";
-import { ADDRESS_SIZE, MEMORY } from './config';
-import { MoonOp, opFromString } from "./op";
+import { instrAToWord, instrBToWord, MoonOp, opFromString } from "./op";
 import { AST, ASTNode, BranchNode, DerivationEnter, DerivationEntry, DerivationExit, DerivationToken, FA, Grammar, GrammarEnd, GrammarSymbol, GrammarTerminal, ParseTable, Token, TokenNode, Visitor, VisitorData } from "./utils";
 
 export class MoonParser {
     private fa: FA;
     private grammar: Grammar;
+    private config: Config;
 
-    constructor() {
+    constructor(config: Config) {
         this.fromSlng();
+        this.config = config;
     }
 
     private fromSlng() {
@@ -178,8 +180,8 @@ export class MoonParser {
     public parse(source: string): MoonData {
         let tokens = this.tokenize(source);
         let ast = this.treeify(tokens);
-        let symbols = new MoonType().visit(ast).getData();
-        let data = new MoonGenerator(symbols).visit(ast).getData();
+        let symbols = new MoonType(this.config).visit(ast).getData();
+        let data = new MoonGenerator(this.config, symbols).visit(ast).getData();
 
         return data;
     }
@@ -193,6 +195,10 @@ class MoonSymbol extends VisitorData {
         this.symbols = {};
     }
 
+    public getSymbols(address: number): string[] {
+        return Object.entries(this.symbols).filter(([_, symbolAddress]) => symbolAddress === address).map(([symbol]) => symbol);
+    }
+
     protected mergeOne<T extends this>(other: T): void {
         let otherSet = new Set(Object.keys(other.symbols));
         let intersect = [...Object.keys(this.symbols)].filter(symbol => otherSet.has(symbol));
@@ -204,36 +210,52 @@ class MoonSymbol extends VisitorData {
 }
 
 class MoonType extends Visitor<MoonSymbol> {
+    private config: Config;
     private offset: number;
+    private scope?: MoonOp;
+
+    constructor(config: Config) {
+        super();
+        this.config = config;
+    }
 
     protected enter(ast: AST): void {
         this.offset = 0;
+        this.scope = null;
     }
 
     protected exit(data: MoonSymbol): void {
-        data.symbols["topaddr"] = MEMORY * 4;
+        data.symbols["topaddr"] = this.config.topAddress;
+    }
+
+    protected elseEnter(ast: AST, index: number) {
+        let node = ast.node(index);
+
+        if(node instanceof BranchNode && node.getSymbol().startsWith("Instr")) {
+            this.scope = opFromString(ast.lexeme(ast.child(index, 0)));
+        }
     }
 
     protected elseExit(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
         let node = ast.node(index);
 
-        if(node instanceof BranchNode) {
-            if(node.getSymbol().startsWith("Instr")) {
-                let op = opFromString(ast.lexeme(ast.child(index, 0)));
+        if(node instanceof BranchNode && node.getSymbol().startsWith("Instr")) {
+            let op = opFromString(ast.lexeme(ast.child(index, 0)));
 
-                switch(op) {
-                    case MoonOp.bad:
-                    case MoonOp.db:
-                    case MoonOp.dw:
-                    case MoonOp.org:
-                    case MoonOp.entry:
-                    case MoonOp.res:
-                    case MoonOp.align:
-                        // TODO
-                        break;
-                    default:
-                        this.offset += ADDRESS_SIZE;
-                }
+            switch(op) {
+                case MoonOp.bad:
+                case MoonOp.db:
+                case MoonOp.dw:
+                case MoonOp.org:
+                case MoonOp.res:
+                    break;
+                case MoonOp.align:
+                    if(this.offset % this.config.addressSize != 0) this.offset += this.config.addressSize - this.offset % this.config.addressSize;
+                    break;
+                case MoonOp.entry:
+                    break;
+                default:
+                    this.offset += this.config.addressSize;
             }
         }
 
@@ -253,6 +275,42 @@ class MoonType extends Visitor<MoonSymbol> {
 
         return data;
     }
+
+    protected exitString(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
+        let string = ast.lexeme(ast.child(index, 0)).slice(1, -1);
+
+        switch(this.scope) {
+            case MoonOp.db:
+                this.offset += string.length;
+                break;
+            case MoonOp.dw:
+                this.offset += string.length * this.config.addressSize;
+                break;
+        }
+
+        return new MoonSymbol().merge(tree);
+    }
+
+    protected exitNumber(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
+        let number = parseInt(ast.lexeme(ast.child(index, 0)));
+
+        switch(this.scope) {
+            case MoonOp.db:
+                this.offset += 1;
+                break;
+            case MoonOp.dw:
+                this.offset += this.config.addressSize;
+                break;
+            case MoonOp.res:
+                this.offset += number;
+                break;
+            case MoonOp.org:
+                this.offset = number;
+                break;
+        }
+
+        return new MoonSymbol().merge(tree);
+    }
 }
 
 export class MoonData extends VisitorData {
@@ -262,8 +320,10 @@ export class MoonData extends VisitorData {
     public words: [number, number][];
     public constants: number[];
     public symbols?: MoonSymbol;
+    public innerOffset: number;
 
-    public static offset: number = 0;
+    public static config: Config;
+    private static staticOffset: number = 0;
 
     constructor() {
         super();
@@ -273,6 +333,27 @@ export class MoonData extends VisitorData {
         this.words = [];
         this.constants = [];
         this.symbols = null;
+        this.innerOffset = 0;
+    }
+
+    public static resetStaticOffset() {
+        this.staticOffset = 0;
+    }
+
+    public static getStaticOffset() {
+        return this.staticOffset;
+    }
+
+    public get offset(): number {
+        return this.innerOffset;
+    }
+
+    public setOffset() {
+        this.innerOffset = MoonData.staticOffset;
+    }
+
+    public static addStaticOffset(offset: number) {
+        this.staticOffset += offset;
     }
 
     public popRegisters(): number[] {
@@ -287,16 +368,17 @@ export class MoonData extends VisitorData {
         return constants;
     }
 
+    private pushInstr(instr: number) {
+        this.words.push([MoonData.staticOffset, instr]);
+        MoonData.staticOffset += MoonData.config.addressSize;
+    }
+
     public pushInstrA(op: MoonOp, ri: number, rj: number, rk: number) {
-        let instr = (op as number) << 26 | ri << 22 | rj << 18 | rk << 14;
-        this.words.push([MoonData.offset, instr]);
-        MoonData.offset += ADDRESS_SIZE;
+        this.pushInstr(instrAToWord(MoonData.config, op, ri, rj, rk));
     }
 
     public pushInstrB(op: MoonOp, ri: number, rj: number, k: number) {
-        let instr = (op as number) << 26 | ri << 22 | rj << 18 | k & 0xFFFF;
-        this.words.push([MoonData.offset, instr]);
-        MoonData.offset += ADDRESS_SIZE;
+        this.pushInstr(instrBToWord(MoonData.config, op, ri, rj, k));
     }
 
     protected mergeOne<T extends this>(other: T) {
@@ -309,19 +391,23 @@ export class MoonData extends VisitorData {
 }
 
 class MoonGenerator extends Visitor<MoonData> {
+    private config: Config;
     private symbols: MoonSymbol;
 
-    constructor(symbols: MoonSymbol) {
+    constructor(config: Config, symbols: MoonSymbol) {
         super();
+        this.config = config;
         this.symbols = symbols;
     }
 
     protected enter(ast: AST): void {
-        MoonData.offset = 0;
+        MoonData.config = this.config;
+        MoonData.resetStaticOffset();
     }
 
     protected exit(data: MoonData): void {
         data.symbols = this.symbols;
+        data.setOffset();
     }
 
     protected elseExit(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
@@ -380,10 +466,10 @@ class MoonGenerator extends Visitor<MoonData> {
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
         switch(op) {
             case MoonOp.entry:
-                data.entry = MoonData.offset;
+                data.entry = MoonData.getStaticOffset();
                 break;
             case MoonOp.align:
-                if(MoonData.offset % 4 != 0) MoonData.offset += 4 - MoonData.offset % 4;
+                if(MoonData.getStaticOffset() % this.config.addressSize != 0) MoonData.addStaticOffset(this.config.addressSize - MoonData.getStaticOffset() % this.config.addressSize);
                 break;
             case MoonOp.nop:
             case MoonOp.hlt:
@@ -483,10 +569,10 @@ class MoonGenerator extends Visitor<MoonData> {
 
         switch(op) {
             case MoonOp.org:
-                MoonData.offset = k;
+                MoonData.addStaticOffset(k);
                 break;
             case MoonOp.res:
-                MoonData.offset += k;
+                MoonData.addStaticOffset(k);
                 break;
             case MoonOp.j:
                 data.pushInstrB(op, 0, 0, k);
@@ -505,14 +591,14 @@ class MoonGenerator extends Visitor<MoonData> {
         switch(op) {
             case MoonOp.dw:
                 for(let c of constants) {
-                    data.words.push([MoonData.offset, c]);
-                    MoonData.offset += ADDRESS_SIZE;
+                    data.words.push([MoonData.getStaticOffset(), c]);
+                    MoonData.addStaticOffset(this.config.addressSize);
                 }
                 break;
             case MoonOp.db:
                 for(let c of constants) {
-                    data.bytes.push([MoonData.offset, c]);
-                    MoonData.offset += 1;
+                    data.bytes.push([MoonData.getStaticOffset(), c]);
+                    MoonData.addStaticOffset(1);
                 }
                 break;
         }

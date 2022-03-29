@@ -593,6 +593,7 @@ export abstract class Visitor<T> {
     protected enter(ast: AST): void {}
     protected exit(data: T): void {}
 
+    protected elseEnter(ast: AST, index: number) {}
     protected abstract elseExit(ast: AST, index: number, tree: {[key: number]: T}): T;
     protected abstract elseToken(token: Token): T;
 
@@ -605,6 +606,8 @@ export abstract class Visitor<T> {
 
         if(enterStatement in this) {
             ((this as any)[enterStatement] as EnterStatement<T>)(ast, index);
+        } else{
+            this.elseEnter(ast, index);
         }
         
         let tree: {[key: number]: T} = {};
