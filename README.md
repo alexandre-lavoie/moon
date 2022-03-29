@@ -59,7 +59,7 @@ Moves memory window down by 1 word (increases memory).
 - `n`: Sets/unsets a breakpoint at address `n`.
 - `+n`: Sets/unsets a breakpoint as address `PC + n`.
 - `-n`: Sets/unsets a breakpoint as address `PC - n`.
-- `symbol`: Sets/unsets a breakpoint at the address of `symbol`.
+- `symbol`: Sets/unsets a breakpoint at the address of `symbol` (options available with tab autocomplete).
 
 ## ⚙️ Config
 
