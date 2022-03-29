@@ -24,7 +24,7 @@ Debugger can run on provided assembly files:
 npm run node [/path/to/lib.m ...] /path/to/main.m
 ```
 
-## ⚙️ Menu
+## 📌 Menu
 
 ### 👣 Step
 
@@ -60,6 +60,17 @@ Moves memory window down by 1 word (increases memory).
 - `+n`: Sets/unsets a breakpoint as address `PC + n`.
 - `-n`: Sets/unsets a breakpoint as address `PC - n`.
 - `symbol`: Sets/unsets a breakpoint at the address of `symbol`.
+
+## ⚙️ Config
+
+A `./moon.json` file can be created in this directory to modify the functioning of the VM. Settings are based off the type in `./src/config.ts`. This is the configuration as of now:
+
+```
+architecture: The architecture to run in (32/64).
+memory: The size of memory in bytes.
+window: The number of lines in the memory views (must be a multiple of 2).
+registers: Renames a register rn to a new name (enter as `"rn": "new_name"`).
+```
 
 ## 📃 License
 
