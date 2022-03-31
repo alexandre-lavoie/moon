@@ -36,18 +36,19 @@ class NodeMoonVM extends MoonVM {
     }
 
     private showMessage() {
-        [...this.history].reverse().find(entry => {
+        let reverseHistory = [...this.history].reverse();
+
+        let errorCount = 0;
+        reverseHistory.reverse().forEach(entry => {
             if(entry instanceof ErrorModify) {
+                errorCount++;
                 term.table([[`^R${entry.error}^:`]], {contentHasMarkup: true});
-                return false;
             }
-
-            if(entry instanceof InfoModify) {
-                term.table([[`^B${entry.message}^:`]], {contentHasMarkup: true});
-            }
-
-            return true;
         });
+
+        if(errorCount == 0 && reverseHistory[0] instanceof InfoModify) {
+            term.table([[`^B${reverseHistory[0].message}^:`]], {contentHasMarkup: true});
+        }
     }
 
     private showOutput() {
