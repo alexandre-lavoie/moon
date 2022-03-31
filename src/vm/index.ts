@@ -268,7 +268,9 @@ export abstract class MoonVM {
                 let value = this.registers[ri];
 
                 let valueStr = `\\u${value}`;
-                if(value <= 127) valueStr = String.fromCharCode(value);
+                if(this.config.output === "normal") {
+                    if(value <= 127) valueStr = String.fromCharCode(value);
+                }
 
                 this.history.push(new OutputModify(valueStr));
                 this.putc(valueStr);

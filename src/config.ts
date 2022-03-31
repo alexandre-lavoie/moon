@@ -6,6 +6,7 @@ interface IConfig {
         pc: number
     }
     debug: boolean
+    output: "normal" | "escape" 
     registers: { [key: string]: string }
 }
 
@@ -17,6 +18,7 @@ const DEFAULT_CONFIG: IConfig = {
         pc: 6
     },
     debug: false,
+    output: "normal",
     registers: {}
 };
 
@@ -64,6 +66,10 @@ export default class Config {
 
     public get topAddress(): number {
         return this.memorySize * 4;
+    }
+
+    public get output(): "normal" | "escape" {
+        return this.data.output;
     }
 
     public getRegister(index: number): string {
