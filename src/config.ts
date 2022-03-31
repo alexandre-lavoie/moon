@@ -5,6 +5,7 @@ interface IConfig {
         memory: number 
         pc: number
     }
+    debug: boolean
     registers: { [key: string]: string }
 }
 
@@ -15,6 +16,7 @@ const DEFAULT_CONFIG: IConfig = {
         memory: 10,
         pc: 6
     },
+    debug: false,
     registers: {}
 };
 
@@ -34,6 +36,10 @@ export default class Config {
 
     public get architecture(): number {
         return this.data.architecture;
+    }
+
+    public get debug(): boolean {
+        return this.data.debug;
     }
 
     public get addressSize(): number {

@@ -79,6 +79,14 @@ export abstract class MoonVM {
         this.breakpoints = new Set<number>();
         this.step = true;
 
+        if(this.config.debug) {
+            for(let [symbol, index] of Object.entries(this.data.symbols.symbols)) {
+                if(symbol.toLowerCase().startsWith("debug")) {
+                    this.breakpoints.add(index);
+                }
+            }
+        }
+
         for(let [offset, word] of this.data.words) this.setWord(offset, word, false);
         for(let [offset, byte] of this.data.bytes) this.setByte(offset, byte, false);
     }
