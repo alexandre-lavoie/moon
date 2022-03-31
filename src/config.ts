@@ -65,4 +65,13 @@ export default class Config {
         if(this.data.registers[registerString]) registerString = this.data.registers[registerString];
         return registerString;
     }
+
+    public fromRegister(register: string): number {
+        if(!register.startsWith("r")) {
+            register = Object.fromEntries(Object.entries(this.data.registers).map(r => r.reverse()))[register];
+        }
+
+        if(register == undefined) return -1;
+        else return parseInt(register.substring(1));
+    }
 }

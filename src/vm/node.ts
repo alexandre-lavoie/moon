@@ -83,7 +83,7 @@ class NodeMoonVM extends MoonVM {
         ], {contentHasMarkup: true});
     }
 
-    private showMemory(label: string, offset: number, windowSize: number, showModify: boolean=true) {
+    private showMemory(label: string, offset: number, windowSize: number, showModify: boolean=true, track: string=null) {
         let lastModified = new Set<number>();
         let modified = new Set<number>();
 
@@ -158,8 +158,11 @@ class NodeMoonVM extends MoonVM {
             return `${addressString}: ${symbolString}${message.trim()}${pointerString}`;
         }).join("\n");
 
+        let trackStr = "";
+        if(track && track.length > 0) trackStr = ` [${track}]`
+
         term.table([
-            [(lastModified.size > 0 && showModify) ? `^R${label} (${offset})^:` : `${label} (${offset})`],
+            [(lastModified.size > 0 && showModify) ? `^R${label} (${offset})${trackStr}^:` : `${label} (${offset})${trackStr}`],
             [data]
         ], {contentHasMarkup: true});
     }
@@ -169,7 +172,7 @@ class NodeMoonVM extends MoonVM {
     }
 
     private showTrackMemory() {
-        this.showMemory("Memory", this.memoryOffset, this.config.windowMemorySize);
+        this.showMemory("Memory", this.memoryOffset, this.config.windowMemorySize, true, this.track);
     }
 
     private showAll() {
@@ -220,6 +223,7 @@ class NodeMoonVM extends MoonVM {
                         selectedIndex = option.selectedIndex;
 
                         let input: string = "";
+                        let autoComplete: string[] = [];
                         switch(selectedIndex) {
                             case 0:
                                 this.memoryOffset = Math.max(0, this.memoryOffset - this.config.addressSize);
@@ -232,12 +236,17 @@ class NodeMoonVM extends MoonVM {
                                 this.showTrackMemory();
 
                                 term("Offset: ");
-                                input = await new Promise(resolve => term.inputField((_: any, input: string) => resolve(input)));
+                                autoComplete = [...Object.keys(this.data.symbols.symbols), "pc"];
+                                input = await new Promise(resolve => term.inputField({ autoComplete, autoCompleteMenu: true }, (_: any, input: string) => resolve(input)));
 
-                                if(input.startsWith("+")) this.memoryOffset = this.memoryOffset + parseInt(input.substring(1));
-                                else if(input.startsWith("-")) this.memoryOffset = this.memoryOffset - parseInt(input.substring(1));
+                                if(input.trim().startsWith("+")) this.memoryOffset = this.memoryOffset + parseInt(input);
+                                else if(input.trim().startsWith("-")) this.memoryOffset = this.memoryOffset + parseInt(input);
+                                else if(!isNaN(parseInt(input))) this.memoryOffset = parseInt(input);
                                 else if(input.trim().toLowerCase() === "pc") this.memoryOffset = this.getPC();
-                                else this.memoryOffset = parseInt(input);
+                                else {
+                                    let symbolOffset = this.data.symbols.symbols[input.trim()];
+                                    if(symbolOffset !== undefined) this.memoryOffset = symbolOffset;
+                                }
 
                                 break;
                             case 3:
@@ -245,7 +254,12 @@ class NodeMoonVM extends MoonVM {
                                 this.showTrackMemory();
 
                                 term("Track: ");
-                                this.track = await new Promise(resolve => term.inputField((_: any, input: string) => resolve(input)));
+                                autoComplete = new Array(16).fill(0).map((_, i) => this.config.getRegister(i));
+                                input = await new Promise(resolve => term.inputField({ autoComplete, autoCompleteMenu: true }, (_: any, input: string) => resolve(input)));
+
+                                let registerIndex = this.config.fromRegister(input);
+                                if(registerIndex >= 0) this.track = `r${registerIndex}`;
+                                else this.track = "";
 
                                 this.updateTrackOffset();
 
