@@ -20,10 +20,6 @@ export class Token {
     public getType(): string {
         return this.type;
     }
-
-    public toDot(): string {
-        return `${this.type} | ${this.lexeme}`;
-    }
 }
 
 export class FA {
@@ -35,44 +31,6 @@ export class FA {
         this.edges = edges;
     }
 
-    public static deserialize(json: any): FA {
-        let faTerminals: string[] = json.f;
-        let faMaxNode = Object.keys(json.g).reduce((previous, index) => Math.max(parseInt(index), previous), 0);
-
-        let faNodes: FANode[] = [];
-        let faEdges: {[key: number]: {[key: number]: FASymbol[]}} = {};
-        for(let i = 0; i <= faMaxNode; i++) {
-            let node: {l?: boolean, s?: boolean, f?: number, e?: {[key: string]: (Array<number> | number)[]}} = (json.g as any)[`${i}`];
-
-            let lazy = node.hasOwnProperty("l");
-            let skip = node.hasOwnProperty("s");
-
-            let terminal: string = null;
-            if(node.hasOwnProperty("f")) {
-                terminal = faTerminals[node["f"]];
-            }
-
-            faNodes.push(new FANode(lazy, skip, terminal));
-
-            let edges: {[key: number]: FASymbol[]} = {};
-            if(node.hasOwnProperty("e")) {
-                for(let [child, symbols] of Object.entries(node.e)) {
-                    edges[parseInt(child)] = symbols.map(symbol => {
-                        if(symbol instanceof Array) {
-                            return new FASymbol(symbol[0], symbol[1]);
-                        } else {
-                            return new FASymbol(symbol, symbol);
-                        }
-                    });
-                }
-            }
-
-            faEdges[i] = edges;
-        }
-
-        return new FA(faNodes, faEdges);
-    }
-
     public getNode(index: number): FANode {
         if(this.nodes[index] === undefined) {
             throw new Error(`Unknown node ${index}`);
@@ -82,6 +40,8 @@ export class FA {
     }
 
     public next(index: number, symbol: number): number | null {
+        if(this.edges[index] == null) return null;
+
         for(let [child, edges] of Object.entries(this.edges[index])) {
             for(let edge of edges) {
                 if(edge.contains(symbol)) {
@@ -184,20 +144,8 @@ export class AST {
     public lexeme(index: number): string {
         return this.tokens(index).map(token => token.getLexeme()).join("");
     }
-
-    public toDot(): string {
-        let output = `digraph {\ncharset="UTF-8" splines=true splines=spline rankdir=LR\nnode[shape=record,fontname=Sans];\n`;
-
-        output += this.nodes.map((node, index) => `${index}[label="${node.toDot()}"]\n`).join("");
-        output += Object.entries(this.edges).map(([parent, children]) => children.map(child => `${parent}->${child}\n`).join("")).join("");
-        output += "}\n";
-
-        return output;
-    }
 }
-export abstract class ASTNode {
-    public abstract toDot(): string;
-}
+export abstract class ASTNode {}
 export class BranchNode extends ASTNode {
     private symbol: string;
 
@@ -207,10 +155,6 @@ export class BranchNode extends ASTNode {
     }
 
     public getSymbol(): string {
-        return this.symbol;
-    }
-
-    public toDot(): string {
         return this.symbol;
     }
 }
@@ -225,281 +169,18 @@ export class TokenNode extends ASTNode {
     public getToken(): Token {
         return this.token;
     }
-
-    public toDot(): string {
-        return this.token.toDot();
-    }
 }
 
 export class ParseTable {
-    private table: {[key: number]: {[key: number]: number[]}};
+    private table: Map<number, Map<number, number[]>>;
 
-    constructor(table: {[key: number]: {[key: number]: number[]}}) {
+    constructor(table: Map<number, Map<number, number[]>>) {
         this.table = table;
     }
 
     public next(atomIndex: number, tokenIndex: number): number[] | null {
-        let rule = this.table[atomIndex]?.[tokenIndex];
+        let rule = this.table.get(atomIndex)?.get(tokenIndex);
         return rule;
-    }
-
-    public static fromGrammar(grammar: Grammar): ParseTable {
-        let [firsts, follows] = GrammarSet.sets(grammar);
-        let table: {[key: number]: {[key: number]: number[]}} = {};
-
-        for(let symbolIndex = 0; symbolIndex < grammar.getAtomLength(); symbolIndex++) {
-            let atom = grammar.getAtom(symbolIndex);
-
-            if(!(atom instanceof GrammarSymbol)) continue;
-
-            let entries: {[key: number]: number[]} = {};
-            let rules = grammar.getRules(symbolIndex);
-            for(let rule of rules) {
-                let queue: number[] = [rule[0]];
-                
-                while(queue.length > 0) {
-                    let nextIndex = queue.pop();
-                    let nextAtom = grammar.getAtom(nextIndex);
-
-                    if(nextAtom instanceof GrammarSymbol) {
-                        let set = firsts.getSet(nextIndex);
-                        queue = [...queue, ...set];
-                    } else if(nextAtom instanceof GrammarEpsilon) {
-                        let set = follows.getSet(symbolIndex);
-                        queue = [...queue, ...set];
-                    } else {
-                        // TODO: Why can we reach here?
-                        if(entries[nextIndex] !== undefined && entries[nextIndex].some((v, i) => v != rule[i])) {
-                            // throw ["Not LL1", atom, nextAtom, entries[nextIndex], rule];
-                        }
-                        entries[nextIndex] = rule;
-                    }
-                }
-            }
-            table[symbolIndex] = entries;
-        }
-
-        return new ParseTable(table);
-    }
-}
-
-export class GrammarSet {
-    private sets: {[key: number]: Set<number>};
-    private grammar: Grammar;
-
-    constructor(sets: {[key: number]: Set<number>}, grammar: Grammar) {
-        this.sets = sets;
-        this.grammar = grammar;
-    }
-
-    public toString(): string {
-        let output = "";
-        for(let [symbolIndex, set] of Object.entries(this.sets)) {
-            output += this.grammar.getAtom(parseInt(symbolIndex)).toString() + " = [";
-
-            for(let atomIndex of set) {
-                output += this.grammar.getAtom(atomIndex).toString() + " ";
-            }
-
-            output = output.trimEnd();
-            output += "]\n";
-        }
-
-        return output;
-    }
-
-    public getSet(key: number): Set<number> | undefined {
-        return this.sets[key];
-    }
-
-    private static first(grammar: Grammar, atomIndex: number, epsilonIndex: number, firsts: {[key: number]: Set<number>}): Set<number> {
-        if(firsts[atomIndex] !== undefined) return firsts[atomIndex];
-
-        let atom = grammar.getAtom(atomIndex);
-
-        let firstSet = new Set<number>();
-        if(atom instanceof GrammarSymbol) {
-            for(let rule of grammar.getRules(atomIndex)) {
-                for(let nextAtom of rule) {
-                    if(atomIndex === nextAtom) continue;
-
-                    let nextSet = this.first(grammar, nextAtom, epsilonIndex, firsts);
-
-                    firstSet = new Set([...firstSet, ...nextSet]);
-
-                    if(!nextSet.has(epsilonIndex)) break;
-                }
-            }
-
-            firsts[atomIndex] = firstSet;
-        } else {
-            firstSet.add(atomIndex);
-        }
-
-        return firstSet;
-    }
-
-    private static firsts(grammar: Grammar): GrammarSet {
-        let epsilonIndex = grammar.getEpsilonIndex();
-        let firsts = {};
-
-        for(let i = 0; i < grammar.getAtomLength(); i++) {
-            this.first(grammar, i, epsilonIndex, firsts);
-        }
-
-        return new GrammarSet(firsts, grammar);
-    }
-
-    private static follows(grammar: Grammar, firsts: GrammarSet): GrammarSet {
-        let epsilonIndex = grammar.getEpsilonIndex();
-        let startIndex = grammar.getStartIndex();
-
-        let startFollows: {[key: number]: Set<number>} = {};
-        for(let i = 0; i < grammar.getAtomLength(); i++) {
-            let atom = grammar.getAtom(i);
-
-            if(atom instanceof GrammarSymbol) {
-                let set = new Set<number>();
-                if(i == startIndex) set.add(grammar.getEndIndex());
-                startFollows[i] = set;
-            }
-        }
-
-        for(let symbolIndex = 0; symbolIndex < grammar.getAtomLength(); symbolIndex++) {
-            for(let rule of grammar.getRules(symbolIndex)) {
-                for(let i = 0; i < rule.length; i++) {
-                    let index = rule[i];
-                    let atom = grammar.getAtom(index);
-
-                    if(atom instanceof GrammarSymbol) {
-                        let end = true;
-
-                        let nextFollow = startFollows[index];
-                        for(let j = i + 1; j < rule.length; j++) {
-                            let nextIndex = rule[j];
-                            let nextFirst = firsts.getSet(nextIndex);
-
-                            if(nextFirst === undefined) {
-                                nextFirst = new Set<number>();
-                                if(nextIndex != epsilonIndex) nextFirst.add(nextIndex);
-                            }
-
-                            nextFollow = new Set([...nextFollow, ...nextFirst]);
-                            startFollows[index] = nextFollow;
-
-                            if(!nextFirst.has(epsilonIndex)) {
-                                end = false;
-                                break;
-                            }
-
-                            nextFollow.add(nextIndex);
-                        }
-
-                        if(end) nextFollow.add(symbolIndex);
-
-                        nextFollow.delete(index);
-                    }
-                }
-            }
-        }
-
-        let follows: {[key: number]: Set<number>} = {};
-        for(let symbolIndex of Object.keys(startFollows)) {
-            let followSet = new Set<number>();
-            let queue = [parseInt(symbolIndex)];
-            let seen = new Set<number>();
-
-            while(queue.length > 0) {
-                let nextAtom = queue.pop();
-
-                if(seen.has(nextAtom)) continue;
-                seen.add(nextAtom);
-
-                for(let childIndex of startFollows[nextAtom]) {
-                    let childAtom = grammar.getAtom(childIndex);
-
-                    if(childAtom instanceof GrammarSymbol) {
-                        queue.push(childIndex);
-                    } else if(!(childAtom instanceof GrammarEpsilon)) {
-                        followSet.add(childIndex);
-                    }
-                }
-            }
-
-            follows[parseInt(symbolIndex)] = followSet;
-        }
-
-        return new GrammarSet(follows, grammar);
-    }
-
-    public static sets(grammar: Grammar): [GrammarSet, GrammarSet] {
-        let firsts = this.firsts(grammar);
-        let follows = this.follows(grammar, firsts);
-
-        return [firsts, follows];
-    }
-}
-
-export class Grammar {
-    private atoms: GrammarAtom[];
-    private expressions: {[key: number]: number[][]};
-
-    constructor(atoms: GrammarAtom[], expressions: {[key: number]: number[][]}) {
-        this.atoms = atoms;
-        this.expressions = expressions;
-    }
-
-    public static deserialize(json: any): Grammar {
-        let grammarAtoms: GrammarAtom[] = json.a.map((atom: any) => {
-            switch(atom[0]) {
-                case 0:
-                    return new GrammarEpsilon();
-                case 1:
-                    return new GrammarTerminal(atom[1] as string)
-                case 2:
-                    return new GrammarSymbol(atom[1] as string);
-            }
-        });
-
-        let grammarExpressions: {[key: number]: number[][]} = {};
-        for(let [index, expressions] of Object.entries(json.t)) {
-            grammarExpressions[parseInt(index)] = expressions as any;
-        }
-
-        return new Grammar(grammarAtoms, grammarExpressions);
-    }
-
-    public getTokenIndex(token: Token): number {
-        let index = this.atoms.findIndex(atom => atom instanceof GrammarTerminal && atom.getTerminal() == token.getType());
-        if(index == null) throw new Error(`Could not find ${token}.`);
-        return index;
-    }
-
-    public getAtomLength(): number {
-        return this.atoms.length;
-    }
-
-    public getEndIndex(): number {
-        return Number.MAX_VALUE;
-    }
-
-    public getStartIndex(): number {
-        let index = this.atoms.findIndex(atom => atom instanceof GrammarSymbol && atom.getSymbol() == "START");
-        return index;
-    }
-
-    public getAtom(index: number): GrammarAtom {
-        if(index >= Number.MAX_VALUE) return new GrammarEnd();
-        return this.atoms[index];
-    }
-
-    public getRules(index: number): number[][] {
-        if(this.expressions[index] === undefined) return [];
-        else return this.expressions[index];
-    }
-
-    public getEpsilonIndex(): number {
-        return this.atoms.findIndex(atom => atom instanceof GrammarEpsilon);
     }
 }
 export class GrammarAtom {}
@@ -648,5 +329,72 @@ export abstract class Visitor<T> {
         this.exit(this.data);
 
         return this;
+    }
+}
+
+export class ByteStream {
+    private stream: Uint8Array;
+    private index: number;
+
+    constructor(stream: Uint8Array) {
+        this.stream = stream;
+        this.index = 0;
+    }
+
+    public static fromString(string: string): ByteStream {
+        return new ByteStream(new TextEncoder().encode(string));
+    }
+
+    private un(size: number): number {
+        let v = 0;
+
+        for(let i = 0; i < size; i++) {
+            let b = this.u8();
+            v |= b << (i * 8);
+        }
+
+        return v;
+    }
+
+    public u8(): number {
+        return this.stream[this.index++];
+    }
+
+    public u16(): number {
+        return this.un(2);
+    }
+
+    public str(size: number=-1): string {
+        if(size == -1) size = this.u8();
+
+        let bytes = [];
+        for(let i = 0; i < size; i++) bytes.push(this.u8());
+
+        return String.fromCharCode(...bytes);
+    }
+
+    public list<T>(value: (stream: this) => T): T[] {
+        let size = this.u16();
+
+        let list = [];
+        for(let i = 0; i < size; i++) {
+            list.push(value(this));
+        }
+    
+        return list;
+    }
+
+    public dict<T, K>(key: (stream: this) => T, value: (stream: this) => K): Map<T, K> {
+        let size = this.u16();
+
+        let entries: [T, K][] = [];
+        for(let i = 0; i < size; i++) {
+            let k = key(this);
+            let v = value(this);
+
+            entries.push([k, v]);
+        }
+
+        return new Map(entries);
     }
 }

@@ -1,9 +1,15 @@
 {
     "compilerOptions": {
-        "target": "ES5",
+        "rootDir": ".",
+        "target": "es2019",
+        "outDir": "out",
+        "moduleResolution": "node",
         "noImplicitAny": true,
-        "removeComments": true,
-        "resolveJsonModule": true,
-        "downlevelIteration": true
-    }
+        "declaration": true,
+        "downlevelIteration": true,
+        "emitDeclarationOnly": true,
+        "isolatedModules": true,
+        "typeRoots": ["node_modules/@types", "typings"]
+    },
+    "include": ["src/**/*", "src/*", "typings/**/*", "typings/*"]
 }

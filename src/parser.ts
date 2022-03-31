@@ -1,21 +1,81 @@
 import Config from "./config";
-import * as moonJSON from "./lang/moon.json";
 import { instrAToWord, instrBToWord, MoonOp, opFromString } from "./op";
-import { AST, ASTNode, BranchNode, DerivationEnter, DerivationEntry, DerivationExit, DerivationToken, FA, Grammar, GrammarEnd, GrammarSymbol, GrammarTerminal, ParseTable, Token, TokenNode, Visitor, VisitorData } from "./utils";
+import { AST, ASTNode, BranchNode, ByteStream, DerivationEnter, DerivationEntry, DerivationExit, DerivationToken, FA, FANode, FASymbol, GrammarAtom, GrammarEnd, GrammarEpsilon, GrammarSymbol, GrammarTerminal, ParseTable, Token, TokenNode, Visitor, VisitorData } from "./utils";
 
+import * as moonClng from "./lang/moon.clng";
 export class MoonParser {
     private fa: FA;
-    private grammar: Grammar;
+    private atoms: GrammarAtom[];
+    private terminalAtomIndices: {[key: string]: number};
+    private startIndex: number;
+    private endIndex: number;
+    private parseTable: ParseTable;
     private config: Config;
 
     constructor(config: Config) {
-        this.fromSlng();
+        this.fromClng();
         this.config = config;
     }
 
-    private fromSlng() {
-        this.fa = FA.deserialize(moonJSON.l);
-        this.grammar = Grammar.deserialize(moonJSON.p);
+    private fromClng() {
+        let dataUri = moonClng as any as string;
+        let base64 = dataUri.split(";base64,")[1];
+        let source = new Uint8Array(Buffer.from(base64, "base64"));
+        let s = new ByteStream(source);
+
+        if(s.str(4) !== "CLNG") throw new Error("Not a CLNG file");
+
+        let nodes = s.list(s => [s.u8(), s.u16()]);
+        let edges = s.dict(s => s.u16(), s => s.dict(s => s.u16(), s => s.list(s => [s.u8(), s.u8()])));
+        let symbolRules = s.dict(s => s.u16(), s => s.dict(s => s.u16(), s => s.list(s => s.u16())));
+        let terminals = s.list(s => s.str());
+        let symbols = s.list(s => s.str());
+
+        let faNodes: FANode[] = nodes.map(([flags, terminalIndex]) => {
+            let skip = (flags & 0b1) > 0;
+            let lazy = (flags & 0b10) > 0;
+
+            let terminal = null;
+            if(terminalIndex > 0) terminal = terminals[terminalIndex];
+
+            return new FANode(lazy, skip, terminal);
+        });
+
+        let faEdges: {[key: number]: {[key: number]: FASymbol[]}} = {};
+        edges.forEach((edges, inNode) => {
+            let out: {[key: number]: FASymbol[]} = {};
+            edges.forEach((edges, outNode) => {
+                let ranges: FASymbol[] = [];
+                edges.forEach(([l, r]) => {
+                    ranges.push(new FASymbol(l, r));
+                });
+                out[outNode] = ranges;
+            });
+            faEdges[inNode] = out;
+        });
+
+        this.fa = new FA(faNodes, faEdges);
+
+        let atoms: GrammarAtom[] = [];
+        let terminalAtoms: {[key: string]: number} = {};
+        for(let terminal of terminals) {
+            if(terminal === "") atoms.push(new GrammarEpsilon());
+            else {
+                terminalAtoms[terminal] = atoms.length;
+                atoms.push(new GrammarTerminal(terminal));
+            }
+        }
+        for(let symbol of symbols) {
+            if(symbol === "START") this.startIndex = atoms.length;
+            else if(symbol === "$") this.endIndex = atoms.length;
+
+            if(symbol === "$") atoms.push(new GrammarEnd());
+            else atoms.push(new GrammarSymbol(symbol));
+        }
+        this.atoms = atoms;
+        this.terminalAtomIndices = terminalAtoms;
+
+        this.parseTable = new ParseTable(symbolRules);
     }
 
     private tokenizeNext(source: string, offset: number): [Token | null, number] {
@@ -74,10 +134,8 @@ export class MoonParser {
     private parseDerivation(tokens: Token[]): DerivationEntry[] {
         let derivation: DerivationEntry[] = [];
 
-        let parseTable = ParseTable.fromGrammar(this.grammar);
-
         let token = 0;
-        let stack: (number | string)[] = [this.grammar.getStartIndex(), this.grammar.getEndIndex()];
+        let stack: (number | string)[] = [this.startIndex, this.endIndex];
         while(stack.length > 0) {
             let atomIndex = stack.shift();
 
@@ -87,14 +145,14 @@ export class MoonParser {
             }
 
             let tokenIndex;
-            if(token < tokens.length) tokenIndex = this.grammar.getTokenIndex(tokens[token]);
-            else tokenIndex = this.grammar.getEndIndex();
+            if(token < tokens.length) tokenIndex = this.terminalAtomIndices[tokens[token].getType()];
+            else tokenIndex = this.endIndex;
 
-            let atom = this.grammar.getAtom(atomIndex);
+            let atom = this.atoms[atomIndex];
 
             if(atom instanceof GrammarSymbol) {
                 derivation.push(new DerivationEnter(atom.getSymbol()));
-                let rule = parseTable.next(atomIndex, tokenIndex);
+                let rule = this.parseTable.next(atomIndex, tokenIndex);
                 if(rule == null) throw new Error(`Parsing symbol ${atom} and ${tokens[token]} failed`);
                 stack = [...rule, atom.getSymbol(), ...stack];
             } else if(atom instanceof GrammarEnd) {

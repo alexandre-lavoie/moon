@@ -1,0 +1,32 @@
+{
+    "presets": [
+        "@babel/preset-typescript",
+        [
+            "@babel/preset-env",
+            {
+                "targets": {
+                    "node": "6.10"
+                }
+            }
+        ]
+    ],
+    "plugins": [
+        [
+            "inline-import-data-uri",
+            {
+                "extensions": [
+                    ".clng"
+                ]
+            }
+        ],
+        [
+            "@babel/plugin-transform-runtime",
+            {
+                "absoluteRuntime": false,
+                "corejs": false,
+                "helpers": true,
+                "regenerator": true
+            }
+        ]
+    ]
+}

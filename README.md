@@ -16,9 +16,17 @@ Dependencies can be installed using:
 npm install
 ```
 
+### 🚧 Build
+
+Build the project:
+
+```
+npm run build
+```
+
 ### 💿 Usage
 
-Debugger can run on provided assembly files:
+Debug provided assembly files in Node:
 
 ```
 npm run node [/path/to/lib.m ...] /path/to/main.m
