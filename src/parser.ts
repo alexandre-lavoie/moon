@@ -261,7 +261,9 @@ class MoonSymbol extends VisitorData {
         let otherSet = new Set(Object.keys(other.symbols));
         let intersect = [...Object.keys(this.symbols)].filter(symbol => otherSet.has(symbol));
 
-        if(intersect.length > 0) throw new Error(`Duplicate symbols ${intersect}`);
+        if(intersect.length > 0) {
+            throw new Error(`Duplicate symbols ${intersect}`);
+        }
 
         this.symbols = {...this.symbols, ...other.symbols};
     }
@@ -284,6 +286,10 @@ class MoonType extends Visitor<MoonSymbol> {
 
     protected exit(data: MoonSymbol): void {
         data.symbols["topaddr"] = this.config.topAddress;
+    }
+
+    protected elseList(ast: AST, list: MoonSymbol[]): MoonSymbol {
+        return new MoonSymbol().mergeList(list);
     }
 
     protected elseEnter(ast: AST, index: number) {
@@ -472,6 +478,10 @@ class MoonGenerator extends Visitor<MoonData> {
         return new MoonData().merge(tree);
     }
 
+    protected elseList(ast: AST, list: MoonData[]): MoonData {
+        return new MoonData().mergeList(list);
+    }
+
     protected elseToken(token: Token): MoonData {
         return new MoonData();
     }
@@ -479,7 +489,7 @@ class MoonGenerator extends Visitor<MoonData> {
     protected exitRegister(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
         let data = new MoonData().merge(tree);
 
-        let register = parseInt(ast.lexeme(ast.child(index, 0)).substring(1));
+        let register = parseInt(ast.lexeme(index).substring(1));
         data.registers.push(register);
 
         return data;
@@ -491,7 +501,9 @@ class MoonGenerator extends Visitor<MoonData> {
         let symbol = ast.lexeme(ast.child(index, 0));
         let offset = this.symbols.symbols[symbol];
 
-        if(offset == null) throw new Error(`No symbol ${symbol}.`);
+        if(offset == null) {
+            throw new Error(`No symbol ${symbol}.`);
+        }
 
         data.constants.push(offset);
 

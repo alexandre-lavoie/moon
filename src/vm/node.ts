@@ -343,7 +343,8 @@ async function main() {
         source += fs.readFileSync(path).toString() + "\n";
     });
 
-    let rom = new MoonParser(config).parse(source);
+    let parser = new MoonParser(config);
+    let rom = parser.parse(source);
     let vm = new NodeMoonVM(config, rom);
 
     vm.run();

@@ -263,6 +263,12 @@ export abstract class VisitorData {
 
         return this;
     }
+
+    public mergeList<T extends this>(list: T[]): this {
+        for(let entry of list) this.mergeOne(entry);
+
+        return this;
+    }
 }
 
 type EnterStatement<T> = (ast: AST, index: number) => T;
@@ -275,6 +281,7 @@ export abstract class Visitor<T> {
     protected exit(data: T): void {}
 
     protected elseEnter(ast: AST, index: number) {}
+    protected abstract elseList(ast: AST, list: T[]): T;
     protected abstract elseExit(ast: AST, index: number, tree: {[key: number]: T}): T;
     protected abstract elseToken(token: Token): T;
 
@@ -290,17 +297,43 @@ export abstract class Visitor<T> {
         } else{
             this.elseEnter(ast, index);
         }
-        
-        let tree: {[key: number]: T} = {};
-        for(let child of ast.children(index)) {
-            tree[child] = this.visitDeep(ast, child);
-        }
 
-        let exitStatement = `exit${node.getSymbol()}`;
-        if(exitStatement in this) {
-            return ((this as any)[exitStatement] as ExitStatement<T>)(ast, index, tree);
+        let children = ast.children(index);
+        if(isNaN(parseInt(node.getSymbol()))) {
+            let tree: {[key: number]: T} = {};
+
+            for(let index of children) {
+                let child = ast.node(index);
+
+                if(child instanceof BranchNode) {
+                    let symbolNumber = parseInt(child.getSymbol());
+
+                    if(isNaN(symbolNumber)) {
+                        tree[index] = this.visitDeep(ast, index);
+                    } else {
+                        tree[parseInt(child.getSymbol())] = this.visitDeep(ast, index);
+                    }
+                } else {
+                    throw new Error("TODO");
+                }
+            }
+
+            let exitStatement = `exit${node.getSymbol()}`;
+            if(exitStatement in this) {
+                return ((this as any)[exitStatement] as ExitStatement<T>)(ast, index, tree);
+            } else {
+                return this.elseExit(ast, index, tree);
+            }
         } else {
-            return this.elseExit(ast, index, tree);
+            let list: T[] = [];
+
+            for(let index of children) {
+                list.push(this.visitDeep(ast, index));
+            }
+
+            let data = this.elseList(ast, list);
+
+            return data
         }
     }
 
