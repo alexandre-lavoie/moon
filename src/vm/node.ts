@@ -27,9 +27,9 @@ class NodeMoonVM extends MoonVM {
 
     private updateTrackOffset() {
         let last = this.history[this.history.length - 1];
-        if(last !== undefined && last instanceof MemoryModify) {
+        if (last !== undefined && last instanceof MemoryModify) {
             this.memoryOffset = last.address;
-        } else if(this.track.startsWith("r")) {
+        } else if (this.track.startsWith("r")) {
             let index = parseInt(this.track.substring(1));
             this.memoryOffset = this.getRegisters()[index];
         }
@@ -40,14 +40,14 @@ class NodeMoonVM extends MoonVM {
 
         let errorCount = 0;
         reverseHistory.reverse().forEach(entry => {
-            if(entry instanceof ErrorModify) {
+            if (entry instanceof ErrorModify) {
                 errorCount++;
-                term.table([[`^R${entry.error}^:`]], {contentHasMarkup: true});
+                term.table([[`^R${entry.error}^:`]], { contentHasMarkup: true });
             }
         });
 
-        if(errorCount == 0 && reverseHistory[0] instanceof InfoModify) {
-            term.table([[`^B${reverseHistory[0].message}^:`]], {contentHasMarkup: true});
+        if (errorCount == 0 && reverseHistory[0] instanceof InfoModify) {
+            term.table([[`^B${reverseHistory[0].message}^:`]], { contentHasMarkup: true });
         }
     }
 
@@ -55,21 +55,21 @@ class NodeMoonVM extends MoonVM {
         let modifiedOutput = false;
 
         let last = this.history[this.history.length - 1];
-        if(last instanceof OutputModify) {
+        if (last instanceof OutputModify) {
             modifiedOutput = true;
         }
 
         term.table([
-            [(modifiedOutput) ? "^ROutput^:" : "Output"], 
+            [(modifiedOutput) ? "^ROutput^:" : "Output"],
             [(modifiedOutput) ? `^R${this.output}^:` : this.output],
-        ], {contentHasMarkup: true});
+        ], { contentHasMarkup: true });
     }
 
     private showCPU() {
         let modifiedRegister = -1;
 
         let last = this.history[this.history.length - 1];
-        if(last instanceof RegisterModify) {
+        if (last instanceof RegisterModify) {
             modifiedRegister = last.register;
         }
 
@@ -81,19 +81,19 @@ class NodeMoonVM extends MoonVM {
         term.table([
             [(modifiedRegister >= 0) ? "^RRegisters^:" : "Registers", registerStr],
             ["Breakpoints", [...this.breakpoints].join(",")],
-        ], {contentHasMarkup: true});
+        ], { contentHasMarkup: true });
     }
 
-    private showMemory(label: string, offset: number, windowSize: number, showModify: boolean=true, track: string=null) {
+    private showMemory(label: string, offset: number, windowSize: number, showModify: boolean = true, track: string = null) {
         let lastModified = new Set<number>();
         let modified = new Set<number>();
 
         this.history.forEach((entry, index) => {
             let list = (index == this.history.length - 1) ? lastModified : modified;
 
-            if(entry instanceof WordModify) {
-                for(let i = 0; i < this.config.addressSize; i++) list.add(entry.address + i);
-            } else if(entry instanceof ByteModify) {
+            if (entry instanceof WordModify) {
+                for (let i = 0; i < this.config.addressSize; i++) list.add(entry.address + i);
+            } else if (entry instanceof ByteModify) {
                 list.add(entry.address);
             }
         });
@@ -103,69 +103,69 @@ class NodeMoonVM extends MoonVM {
         let halfWindow = Math.trunc(windowSize / 2);
         let low = Math.max(0, offset - halfWindow);
         let high = Math.min(memory.length, offset + halfWindow);
-        if(offset - halfWindow < 0) {
+        if (offset - halfWindow < 0) {
             high = Math.min(memory.length, windowSize - Math.max(0, low));
-        } else if(offset + halfWindow > memory.length) {
+        } else if (offset + halfWindow > memory.length) {
             low = Math.max(0, offset - (windowSize - (memory.length - Math.min(memory.length, offset))));
         }
 
         let chuncks = [];
         let chunk = [];
-        for(let i = low; i < high; i++) {
+        for (let i = low; i < high; i++) {
             chunk.push(memory[i]);
-            if(chunk.length == this.config.addressSize) {
+            if (chunk.length == this.config.addressSize) {
                 chuncks.push(chunk);
                 chunk = [];
             }
         }
 
-        
+
         let data = chuncks.map((chunk, i) => {
             let word = chunk.map((value, j) => value << ((this.config.addressSize - j - 1) * 8)).reduce((previous, value) => previous | value, 0);
             let address = i * this.config.addressSize + low;
 
             let symbols = this.data.symbols.getSymbols(address);
             let symbolString = "";
-            if(symbols.length > 0) {
+            if (symbols.length > 0) {
                 symbolString = `^C${symbols.join(", ")}^:: `;
             }
 
             let addressString = address.toString().padStart(4, "0");
-            if(this.breakpoints.has(address)) addressString = `^B${addressString}^:`;
+            if (this.breakpoints.has(address)) addressString = `^B${addressString}^:`;
             else addressString = `^G${addressString}^:`;
 
             let message = "";
-            if(wordIsInstr(this.config, word)) {
+            if (wordIsInstr(this.config, word)) {
                 message = formatWordInstr(this.config, word);
             } else {
                 let byteString = chunk.map((value, j) => {
                     let offset = i * chunk.length + j + low;
                     let valueHex = value.toString(16).toUpperCase().padStart(2, "0");
-                    return lastModified.has(offset) ? `^R${valueHex}^:` : (modified.has(offset) ? `^B${valueHex}^:` :`${valueHex}`);
+                    return lastModified.has(offset) ? `^R${valueHex}^:` : (modified.has(offset) ? `^B${valueHex}^:` : `${valueHex}`);
                 }).join(" ");
 
                 message = `${byteString} ^M${word}^:`;
             }
 
             let pointers = [];
-            if(this.getPC() == address) pointers.push("pc");
-            if(address > 0) this.getRegisters().forEach((register, i) => {
-                if(register === address) pointers.push(this.config.getRegister(i));
+            if (this.getPC() == address) pointers.push("pc");
+            if (address > 0) this.getRegisters().forEach((register, i) => {
+                if (register === address) pointers.push(this.config.getRegister(i));
             });
 
             let pointerString = "";
-            if(pointers.length > 0) pointerString = ` ^G< ${pointers.join(", ")}^:`;
+            if (pointers.length > 0) pointerString = ` ^G< ${pointers.join(", ")}^:`;
 
             return `${addressString}: ${symbolString}${message.trim()}${pointerString}`;
         }).join("\n");
 
         let trackStr = "";
-        if(track && track.length > 0) trackStr = ` [${track}]`
+        if (track && track.length > 0) trackStr = ` [${track}]`
 
         term.table([
             [(lastModified.size > 0 && showModify) ? `^R${label} (${offset})${trackStr}^:` : `${label} (${offset})${trackStr}`],
             [data]
-        ], {contentHasMarkup: true});
+        ], { contentHasMarkup: true });
     }
 
     private showPCMemory() {
@@ -192,9 +192,9 @@ class NodeMoonVM extends MoonVM {
         let selectedIndex = 0;
 
         loop:
-        while(true) {
+        while (true) {
             this.showAll();
-            
+
             let memory = this.getMemory();
 
             let option: any = await new Promise(resolve => term.singleLineMenu(["Step", "Run", "Memory", "Breakpoint", "Exit"], {
@@ -203,7 +203,7 @@ class NodeMoonVM extends MoonVM {
             }, (_: any, input: any) => resolve(input)));
             selectedIndex = option.selectedIndex;
 
-            switch(selectedIndex) {
+            switch (selectedIndex) {
                 case 0:
                     break loop;
                 case 1:
@@ -213,7 +213,7 @@ class NodeMoonVM extends MoonVM {
                     let selectedIndex = 1;
 
                     offset:
-                    while(true) {
+                    while (true) {
                         term.clear();
                         this.showTrackMemory();
 
@@ -225,7 +225,7 @@ class NodeMoonVM extends MoonVM {
 
                         let input: string = "";
                         let autoComplete: string[] = [];
-                        switch(selectedIndex) {
+                        switch (selectedIndex) {
                             case 0:
                                 this.memoryOffset = Math.max(0, this.memoryOffset - this.config.addressSize);
                                 break;
@@ -240,13 +240,13 @@ class NodeMoonVM extends MoonVM {
                                 autoComplete = [...Object.keys(this.data.symbols.symbols), "pc"];
                                 input = await new Promise(resolve => term.inputField({ autoComplete, autoCompleteMenu: true }, (_: any, input: string) => resolve(input)));
 
-                                if(input.trim().startsWith("+")) this.memoryOffset = this.memoryOffset + parseInt(input);
-                                else if(input.trim().startsWith("-")) this.memoryOffset = this.memoryOffset + parseInt(input);
-                                else if(!isNaN(parseInt(input))) this.memoryOffset = parseInt(input);
-                                else if(input.trim().toLowerCase() === "pc") this.memoryOffset = this.getPC();
+                                if (input.trim().startsWith("+")) this.memoryOffset = this.memoryOffset + parseInt(input);
+                                else if (input.trim().startsWith("-")) this.memoryOffset = this.memoryOffset + parseInt(input);
+                                else if (!isNaN(parseInt(input))) this.memoryOffset = parseInt(input);
+                                else if (input.trim().toLowerCase() === "pc") this.memoryOffset = this.getPC();
                                 else {
                                     let symbolOffset = this.data.symbols.symbols[input.trim()];
-                                    if(symbolOffset !== undefined) this.memoryOffset = symbolOffset;
+                                    if (symbolOffset !== undefined) this.memoryOffset = symbolOffset;
                                 }
 
                                 break;
@@ -259,7 +259,7 @@ class NodeMoonVM extends MoonVM {
                                 input = await new Promise(resolve => term.inputField({ autoComplete, autoCompleteMenu: true }, (_: any, input: string) => resolve(input)));
 
                                 let registerIndex = this.config.fromRegister(input);
-                                if(registerIndex >= 0) this.track = `r${registerIndex}`;
+                                if (registerIndex >= 0) this.track = `r${registerIndex}`;
                                 else this.track = "";
 
                                 this.updateTrackOffset();
@@ -282,20 +282,20 @@ class NodeMoonVM extends MoonVM {
                     let symbolAddress = this.data.symbols.symbols[input.trim()];
 
                     let breakpoint = null;
-                    if(this.data.symbols.symbols[input.trim()]) {
+                    if (this.data.symbols.symbols[input.trim()]) {
                         breakpoint = symbolAddress;
-                    } else if(input.startsWith("+")) {
+                    } else if (input.startsWith("+")) {
                         breakpoint = this.getPC() + parseInt(input.substring(1));
-                    } else if(input.startsWith("-")) {
+                    } else if (input.startsWith("-")) {
                         breakpoint = this.getPC() - parseInt(input.substring(1));
                     } else {
                         breakpoint = parseInt(input);
                     }
 
-                    if(!isNaN(breakpoint)) {
-                        if(breakpoint % this.config.addressSize > 0) breakpoint -= this.config.addressSize - (breakpoint % this.config.addressSize);
+                    if (!isNaN(breakpoint)) {
+                        if (breakpoint % this.config.addressSize > 0) breakpoint -= this.config.addressSize - (breakpoint % this.config.addressSize);
 
-                        if(this.breakpoints.has(breakpoint)) this.breakpoints.delete(breakpoint);
+                        if (this.breakpoints.has(breakpoint)) this.breakpoints.delete(breakpoint);
                         else this.breakpoints.add(breakpoint);
                     }
 
@@ -325,13 +325,13 @@ class NodeMoonVM extends MoonVM {
 async function main() {
     let files = process.argv.slice(2);
 
-    if(files.length == 0) {
+    if (files.length == 0) {
         console.log("Usage: moon [lib ...] main");
         return;
     }
 
     let config;
-    if(fs.existsSync("./moon.json")) {
+    if (fs.existsSync("./moon.json")) {
         config = new Config(JSON.parse(fs.readFileSync("./moon.json").toString()));
     } else {
         config = new Config();
@@ -339,7 +339,7 @@ async function main() {
 
     let source = "";
     files.forEach(path => {
-        if(!fs.existsSync(path)) throw new Error(`Could not find file ${path}`);
+        if (!fs.existsSync(path)) throw new Error(`Could not find file ${path}`);
         source += fs.readFileSync(path).toString() + "\n";
     });
 

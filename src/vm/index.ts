@@ -2,7 +2,7 @@ import { MoonOp, wordToInstr } from "../op";
 import Config from "../config";
 import { MoonData } from "../parser";
 
-export abstract class VMMutation {}
+export abstract class VMMutation { }
 export class OutputModify extends VMMutation {
     public addition: string;
 
@@ -31,8 +31,8 @@ export abstract class MemoryModify extends VMMutation {
         this.current = current;
     }
 }
-export class WordModify extends MemoryModify {}
-export class ByteModify extends MemoryModify {}
+export class WordModify extends MemoryModify { }
+export class ByteModify extends MemoryModify { }
 export class ErrorModify extends VMMutation {
     public error: string;
 
@@ -79,16 +79,16 @@ export abstract class MoonVM {
         this.breakpoints = new Set<number>();
         this.step = true;
 
-        if(this.config.debug) {
-            for(let [symbol, index] of Object.entries(this.data.symbols.symbols)) {
-                if(symbol.toLowerCase().startsWith("debug")) {
+        if (this.config.debug) {
+            for (let [symbol, index] of Object.entries(this.data.symbols.symbols)) {
+                if (symbol.toLowerCase().startsWith("debug")) {
                     this.breakpoints.add(index);
                 }
             }
         }
 
-        for(let [offset, word] of this.data.words) this.setWord(offset, word, false);
-        for(let [offset, byte] of this.data.bytes) this.setByte(offset, byte, false);
+        for (let [offset, word] of this.data.words) this.setWord(offset, word, false);
+        for (let [offset, byte] of this.data.bytes) this.setByte(offset, byte, false);
     }
 
     protected trace(mutation: VMMutation): void {
@@ -116,10 +116,10 @@ export abstract class MoonVM {
         return this.memory;
     }
 
-    private setWord(address: number, word: number, trace: boolean=true): boolean {
-        if(trace) this.trace(new WordModify(address, word));
-        for(let i = 0; i < this.config.addressSize; i++) this.memory[address + this.config.addressSize - i - 1] = (word >> (i * 8)) & 0xFF;
-        if(trace && address < this.data.offset) {
+    private setWord(address: number, word: number, trace: boolean = true): boolean {
+        if (trace) this.trace(new WordModify(address, word));
+        for (let i = 0; i < this.config.addressSize; i++) this.memory[address + this.config.addressSize - i - 1] = (word >> (i * 8)) & 0xFF;
+        if (trace && address < this.data.offset) {
             this.history.push(new ErrorModify(`Overwrote instruction at ${address} with ${word}`));
             return false;
         }
@@ -128,14 +128,14 @@ export abstract class MoonVM {
 
     private loadWord(address: number): number {
         let value = 0;
-        for(let i = 0; i < this.config.addressSize; i++) value |= this.memory[address + this.config.addressSize - i - 1] << (i * 8);
+        for (let i = 0; i < this.config.addressSize; i++) value |= this.memory[address + this.config.addressSize - i - 1] << (i * 8);
         return value;
     }
 
-    private setByte(address: number, byte: number, trace: boolean=true): boolean {
-        if(trace) this.trace(new ByteModify(address, byte));
+    private setByte(address: number, byte: number, trace: boolean = true): boolean {
+        if (trace) this.trace(new ByteModify(address, byte));
         this.memory[address] = byte & 0xFF;
-        if(trace && address < this.data.offset) {
+        if (trace && address < this.data.offset) {
             this.history.push(new ErrorModify(`Overwrote instruction at ${address} with ${byte}`));
             return false;
         }
@@ -150,29 +150,29 @@ export abstract class MoonVM {
         let word: number = this.loadWord(this.pc);
         let [op, ri, rj, rk, k] = wordToInstr(this.config, word);
 
-        switch(op) {
+        switch (op) {
             case MoonOp.bad:
                 this.history.push(new ErrorModify(`Bad at ${this.pc}`));
                 return false;
             case MoonOp.lw:
-                if(this.registers[rj] + k < this.data.offset) {
+                if (this.registers[rj] + k < this.data.offset) {
                     this.history.push(`Read from invalid address ${this.registers[rj] + k}`);
                     return false;
                 }
                 this.setRegister(ri, this.loadWord(this.registers[rj] + k));
                 break;
             case MoonOp.lb:
-                if(this.registers[rj] + k < this.data.offset) {
+                if (this.registers[rj] + k < this.data.offset) {
                     this.history.push(`Read from invalid address ${this.registers[rj] + k}`);
                     return false;
                 }
                 this.setRegister(ri, this.loadByte(this.registers[rj] + k));
                 break;
             case MoonOp.sw:
-                if(!this.setWord(this.registers[rj] + k, this.registers[ri])) return false;
+                if (!this.setWord(this.registers[rj] + k, this.registers[ri])) return false;
                 break;
             case MoonOp.sb:
-                if(!this.setByte(this.registers[rj] + k, this.registers[ri])) return false;
+                if (!this.setByte(this.registers[rj] + k, this.registers[ri])) return false;
                 break;
             case MoonOp.add:
                 this.setRegister(ri, this.registers[rj] + this.registers[rk]);
@@ -268,21 +268,21 @@ export abstract class MoonVM {
                 let value = this.registers[ri];
 
                 let valueStr = `\\u${value}`;
-                if(this.config.output === "normal") {
-                    if(value <= 127) valueStr = String.fromCharCode(value);
+                if (this.config.output === "normal") {
+                    if (value <= 127) valueStr = String.fromCharCode(value);
                 }
 
                 this.history.push(new OutputModify(valueStr));
                 this.putc(valueStr);
                 break;
             case MoonOp.bz:
-                if(this.registers[ri] === 0) {
+                if (this.registers[ri] === 0) {
                     this.setPC(k);
                     return true;
                 }
                 break;
             case MoonOp.bnz:
-                if(this.registers[ri] !== 0) {
+                if (this.registers[ri] !== 0) {
                     this.setPC(k);
                     return true;
                 }
@@ -316,15 +316,15 @@ export abstract class MoonVM {
         this.init();
 
         this.enter();
-        while(true) {
-            if(this.breakpoints.has(this.getPC())) {
+        while (true) {
+            if (this.breakpoints.has(this.getPC())) {
                 this.history.push(new InfoModify("Hit breakpoint"));
                 this.step = true;
             }
 
-            if(this.step) await this.debug();
+            if (this.step) await this.debug();
             let next = await this.next();
-            if(!next) {
+            if (!next) {
                 this.history.push(new InfoModify("Complete"));
                 await this.debug();
                 break;

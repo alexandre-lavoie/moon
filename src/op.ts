@@ -13,7 +13,7 @@ export function wordToInstr(config: Config, word: number): [MoonOp, number, numb
     let ri: number = (word >>> (offset + 8)) & 0b1111;
     let rj: number = (word >>> (offset + 4)) & 0b1111;
     let rk: number = (word >>> offset) & 0b1111;
-    let k: number  = (word >>> 0)  & (maxHalfWord - 1);
+    let k: number = (word >>> 0) & (maxHalfWord - 1);
 
     let sk = (k > maxHalfWord / 2) ? k - maxHalfWord : k;
 
@@ -84,18 +84,18 @@ const STRING_MOON_OP = {
     "org": MoonOp.org,
     "dw": MoonOp.dw,
     "db": MoonOp.db,
-    "res": MoonOp.res,  
+    "res": MoonOp.res,
 }
 
 const MOON_OP_STRING = Object.fromEntries(Object.entries(STRING_MOON_OP).map(entry => entry.reverse()));
 
 export function opToString(op: MoonOp): string {
-    if(MOON_OP_STRING[op] != null) return MOON_OP_STRING[op];
+    if (MOON_OP_STRING[op] != null) return MOON_OP_STRING[op];
     else return "BAD";
 }
 
 export function opFromString(label: string): MoonOp {
-    if((STRING_MOON_OP as any)[label] != null) return (STRING_MOON_OP as any)[label];
+    if ((STRING_MOON_OP as any)[label] != null) return (STRING_MOON_OP as any)[label];
     else return MoonOp.bad;
 }
 
@@ -109,7 +109,7 @@ export function formatWordInstr(config: Config, word: number) {
     let kStr = `^M${k}^:`;
 
     let output = `^B${opStr}^: `;
-    switch(op) {
+    switch (op) {
         case MoonOp.lw:
         case MoonOp.lb:
             output += `${riStr}, ${kStr}(${rjStr})`;

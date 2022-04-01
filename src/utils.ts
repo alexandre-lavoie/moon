@@ -1,3 +1,22 @@
+export class OrderedMap<T, K> {
+    private map: Map<T, K>;
+    private order: Map<T, number>;
+
+    public constructor() { 
+        this.map = new Map<T, K>();
+        this.order = new Map<T, number>();
+    }
+
+    public set(k: T, v: K) {
+        if (!this.map.has(k)) {
+            this.map.set(k, v);
+        } else {
+            this.map.set(k, v);
+            this.order.set(k, this.order.size);
+        }
+    }
+}
+
 export class Token {
     private lexeme: string;
     private type: string;
@@ -24,15 +43,15 @@ export class Token {
 
 export class FA {
     private nodes: FANode[];
-    private edges: {[key: number]: {[key: number]: FASymbol[]}};
+    private edges: { [key: number]: { [key: number]: FASymbol[] } };
 
-    constructor(nodes: FANode[], edges: {[key: number]: {[key: number]: FASymbol[]}}) {
+    constructor(nodes: FANode[], edges: { [key: number]: { [key: number]: FASymbol[] } }) {
         this.nodes = nodes;
         this.edges = edges;
     }
 
     public getNode(index: number): FANode {
-        if(this.nodes[index] === undefined) {
+        if (this.nodes[index] === undefined) {
             throw new Error(`Unknown node ${index}`);
         }
 
@@ -40,11 +59,11 @@ export class FA {
     }
 
     public next(index: number, symbol: number): number | null {
-        if(this.edges[index] == null) return null;
+        if (this.edges[index] == null) return null;
 
-        for(let [child, edges] of Object.entries(this.edges[index])) {
-            for(let edge of edges) {
-                if(edge.contains(symbol)) {
+        for (let [child, edges] of Object.entries(this.edges[index])) {
+            for (let edge of edges) {
+                if (edge.contains(symbol)) {
                     return parseInt(child);
                 }
             }
@@ -70,7 +89,7 @@ export class FANode {
     private lazy: boolean;
     private skip: boolean;
     private terminal?: string;
-    
+
     constructor(lazy: boolean, skip: boolean, terminal?: string) {
         this.lazy = lazy;
         this.skip = skip;
@@ -96,9 +115,9 @@ export class FANode {
 
 export class AST {
     private nodes: ASTNode[];
-    private edges: {[key: number]: number[]};
+    private edges: { [key: number]: number[] };
 
-    constructor(nodes: ASTNode[], edges: {[key: number]: number[]}) {
+    constructor(nodes: ASTNode[], edges: { [key: number]: number[] }) {
         this.nodes = nodes;
         this.edges = edges;
     }
@@ -108,18 +127,18 @@ export class AST {
     }
 
     public children(index: number): number[] {
-        if(!(index in this.edges)) return [];
+        if (!(index in this.edges)) return [];
 
         return this.edges[index];
     }
 
     public child(index: number, tag: number): number | null {
         let childIndex = this.children(index).find(edge => {
-            let node = this.node(edge); 
+            let node = this.node(edge);
             return node instanceof BranchNode && node.getSymbol() === tag.toString();
         });
 
-        if(childIndex === undefined) return null;
+        if (childIndex === undefined) return null;
         else return childIndex;
     }
 
@@ -127,13 +146,13 @@ export class AST {
         let tokens: Token[] = [];
 
         let queue = [index];
-        while(queue.length > 0) {
-            let nodeIndex = queue.pop();
+        while (queue.length > 0) {
+            let nodeIndex = queue.shift();
             let node = this.node(nodeIndex);
 
-            if(node instanceof BranchNode) {
+            if (node instanceof BranchNode) {
                 queue = [...queue, ...this.edges[nodeIndex]];
-            } else if(node instanceof TokenNode) {
+            } else if (node instanceof TokenNode) {
                 tokens.push(node.getToken());
             }
         }
@@ -145,7 +164,7 @@ export class AST {
         return this.tokens(index).map(token => token.getLexeme()).join("");
     }
 }
-export abstract class ASTNode {}
+export abstract class ASTNode { }
 export class BranchNode extends ASTNode {
     private symbol: string;
 
@@ -183,7 +202,7 @@ export class ParseTable {
         return rule;
     }
 }
-export class GrammarAtom {}
+export class GrammarAtom { }
 export class GrammarEpsilon extends GrammarAtom {
     public toString(): string {
         return "ε";
@@ -227,7 +246,7 @@ export class GrammarEnd extends GrammarAtom {
     }
 }
 
-export class DerivationEntry {}
+export class DerivationEntry { }
 class DerivationSymbol extends DerivationEntry {
     private symbol: string;
 
@@ -240,8 +259,8 @@ class DerivationSymbol extends DerivationEntry {
         return this.symbol;
     }
 }
-export class DerivationEnter extends DerivationSymbol {}
-export class DerivationExit extends DerivationSymbol {}
+export class DerivationEnter extends DerivationSymbol { }
+export class DerivationExit extends DerivationSymbol { }
 export class DerivationToken extends DerivationEntry {
     private token: Token;
 
@@ -258,31 +277,31 @@ export class DerivationToken extends DerivationEntry {
 export abstract class VisitorData {
     protected abstract mergeOne<T extends this>(other: T): void;
 
-    public merge<T extends this>(tree: {[key: number]: T}): this {
-        for(let key of Object.keys(tree).sort()) this.mergeOne(tree[key as any]);
+    public merge<T extends this>(tree: { [key: number]: T }): this {
+        for (let key of Object.keys(tree).sort()) this.mergeOne(tree[key as any]);
 
         return this;
     }
 
     public mergeList<T extends this>(list: T[]): this {
-        for(let entry of list) this.mergeOne(entry);
+        for (let entry of list) this.mergeOne(entry);
 
         return this;
     }
 }
 
 type EnterStatement<T> = (ast: AST, index: number) => T;
-type ExitStatement<T> = (ast: AST, index: number, tree: {[key: number]: T}) => T;
+type ExitStatement<T> = (ast: AST, index: number, tree: { [key: number]: T }) => T;
 type EnterToken<T> = (token: Token) => T;
 export abstract class Visitor<T> {
     private data: T;
 
-    protected enter(ast: AST): void {}
-    protected exit(data: T): void {}
+    protected enter(ast: AST): void { }
+    protected exit(data: T): void { }
 
-    protected elseEnter(ast: AST, index: number) {}
+    protected elseEnter(ast: AST, index: number) { }
     protected abstract elseList(ast: AST, list: T[]): T;
-    protected abstract elseExit(ast: AST, index: number, tree: {[key: number]: T}): T;
+    protected abstract elseExit(ast: AST, index: number, tree: { [key: number]: T }): T;
     protected abstract elseToken(token: Token): T;
 
     public getData(): T {
@@ -292,23 +311,23 @@ export abstract class Visitor<T> {
     private visitBranch(ast: AST, index: number, node: BranchNode): T {
         let enterStatement = `enter${node.getSymbol()}`;
 
-        if(enterStatement in this) {
+        if (enterStatement in this) {
             ((this as any)[enterStatement] as EnterStatement<T>)(ast, index);
-        } else{
+        } else {
             this.elseEnter(ast, index);
         }
 
         let children = ast.children(index);
-        if(isNaN(parseInt(node.getSymbol()))) {
-            let tree: {[key: number]: T} = {};
+        if (isNaN(parseInt(node.getSymbol()))) {
+            let tree: { [key: number]: T } = {};
 
-            for(let index of children) {
+            for (let index of children) {
                 let child = ast.node(index);
 
-                if(child instanceof BranchNode) {
+                if (child instanceof BranchNode) {
                     let symbolNumber = parseInt(child.getSymbol());
 
-                    if(isNaN(symbolNumber)) {
+                    if (isNaN(symbolNumber)) {
                         tree[index] = this.visitDeep(ast, index);
                     } else {
                         tree[parseInt(child.getSymbol())] = this.visitDeep(ast, index);
@@ -319,7 +338,7 @@ export abstract class Visitor<T> {
             }
 
             let exitStatement = `exit${node.getSymbol()}`;
-            if(exitStatement in this) {
+            if (exitStatement in this) {
                 return ((this as any)[exitStatement] as ExitStatement<T>)(ast, index, tree);
             } else {
                 return this.elseExit(ast, index, tree);
@@ -327,7 +346,7 @@ export abstract class Visitor<T> {
         } else {
             let list: T[] = [];
 
-            for(let index of children) {
+            for (let index of children) {
                 list.push(this.visitDeep(ast, index));
             }
 
@@ -340,7 +359,7 @@ export abstract class Visitor<T> {
     private visitToken(node: TokenNode): T {
         let enterToken = `token${node.getToken().getType()}`;
 
-        if(enterToken in this) {
+        if (enterToken in this) {
             ((this as any)[enterToken] as EnterToken<T>)(node.getToken());
         } else {
             return this.elseToken(node.getToken());
@@ -350,8 +369,8 @@ export abstract class Visitor<T> {
     private visitDeep(ast: AST, index: number): T {
         let node = ast.node(index);
 
-        if(node instanceof BranchNode) return this.visitBranch(ast, index, node);
-        if(node instanceof TokenNode) return this.visitToken(node);
+        if (node instanceof BranchNode) return this.visitBranch(ast, index, node);
+        if (node instanceof TokenNode) return this.visitToken(node);
 
         throw new Error("Unhandled");
     }
@@ -381,7 +400,7 @@ export class ByteStream {
     private un(size: number): number {
         let v = 0;
 
-        for(let i = 0; i < size; i++) {
+        for (let i = 0; i < size; i++) {
             let b = this.u8();
             v |= b << (i * 8);
         }
@@ -397,11 +416,11 @@ export class ByteStream {
         return this.un(2);
     }
 
-    public str(size: number=-1): string {
-        if(size == -1) size = this.u8();
+    public str(size: number = -1): string {
+        if (size == -1) size = this.u8();
 
         let bytes = [];
-        for(let i = 0; i < size; i++) bytes.push(this.u8());
+        for (let i = 0; i < size; i++) bytes.push(this.u8());
 
         return String.fromCharCode(...bytes);
     }
@@ -410,10 +429,10 @@ export class ByteStream {
         let size = this.u16();
 
         let list = [];
-        for(let i = 0; i < size; i++) {
+        for (let i = 0; i < size; i++) {
             list.push(value(this));
         }
-    
+
         return list;
     }
 
@@ -421,7 +440,7 @@ export class ByteStream {
         let size = this.u16();
 
         let entries: [T, K][] = [];
-        for(let i = 0; i < size; i++) {
+        for (let i = 0; i < size; i++) {
             let k = key(this);
             let v = value(this);
 

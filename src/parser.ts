@@ -6,7 +6,7 @@ import * as moonClng from "./lang/moon.clng";
 export class MoonParser {
     private fa: FA;
     private atoms: GrammarAtom[];
-    private terminalAtomIndices: {[key: string]: number};
+    private terminalAtomIndices: { [key: string]: number };
     private startIndex: number;
     private endIndex: number;
     private parseTable: ParseTable;
@@ -23,7 +23,7 @@ export class MoonParser {
         let source = new Uint8Array(Buffer.from(base64, "base64"));
         let s = new ByteStream(source);
 
-        if(s.str(4) !== "CLNG") throw new Error("Not a CLNG file");
+        if (s.str(4) !== "CLNG") throw new Error("Not a CLNG file");
 
         let nodes = s.list(s => [s.u8(), s.u16()]);
         let edges = s.dict(s => s.u16(), s => s.dict(s => s.u16(), s => s.list(s => [s.u8(), s.u8()])));
@@ -36,14 +36,15 @@ export class MoonParser {
             let lazy = (flags & 0b10) > 0;
 
             let terminal = null;
-            if(terminalIndex > 0) terminal = terminals[terminalIndex];
+            if (terminalIndex > 0) terminal = terminals[terminalIndex];
 
             return new FANode(lazy, skip, terminal);
         });
 
-        let faEdges: {[key: number]: {[key: number]: FASymbol[]}} = {};
+        let faEdges: { [key: number]: { [key: number]: FASymbol[] } } = {};
+
         edges.forEach((edges, inNode) => {
-            let out: {[key: number]: FASymbol[]} = {};
+            let out: { [key: number]: FASymbol[] } = {};
             edges.forEach((edges, outNode) => {
                 let ranges: FASymbol[] = [];
                 edges.forEach(([l, r]) => {
@@ -57,19 +58,19 @@ export class MoonParser {
         this.fa = new FA(faNodes, faEdges);
 
         let atoms: GrammarAtom[] = [];
-        let terminalAtoms: {[key: string]: number} = {};
-        for(let terminal of terminals) {
-            if(terminal === "") atoms.push(new GrammarEpsilon());
+        let terminalAtoms: { [key: string]: number } = {};
+        for (let terminal of terminals) {
+            if (terminal === "") atoms.push(new GrammarEpsilon());
             else {
                 terminalAtoms[terminal] = atoms.length;
                 atoms.push(new GrammarTerminal(terminal));
             }
         }
-        for(let symbol of symbols) {
-            if(symbol === "START") this.startIndex = atoms.length;
-            else if(symbol === "$") this.endIndex = atoms.length;
+        for (let symbol of symbols) {
+            if (symbol === "START") this.startIndex = atoms.length;
+            else if (symbol === "$") this.endIndex = atoms.length;
 
-            if(symbol === "$") atoms.push(new GrammarEnd());
+            if (symbol === "$") atoms.push(new GrammarEnd());
             else atoms.push(new GrammarSymbol(symbol));
         }
         this.atoms = atoms;
@@ -84,13 +85,13 @@ export class MoonParser {
         let lexeme: string = "";
 
         let i = offset;
-        while(true) {
+        while (true) {
             let node = this.fa.getNode(nodeIndex);
 
-            if(node.isTerminal()) {
-                if(node.isLazy()) {
+            if (node.isTerminal()) {
+                if (node.isLazy()) {
                     let token = null;
-                    if(!node.isSkip()) token = new Token(lexeme, node.getTerminal(), offset);
+                    if (!node.isSkip()) token = new Token(lexeme, node.getTerminal(), offset);
                     return [token, i];
                 }
 
@@ -100,14 +101,14 @@ export class MoonParser {
             let symbol = source.charCodeAt(i);
             let nextNode = this.fa.next(nodeIndex, symbol);
 
-            if(nextNode === null) {
-                if(lastIndex === null) {
+            if (nextNode === null) {
+                if (lastIndex === null) {
                     throw new Error(`Tokenizing failed at ${i}`);
                 } else {
                     node = this.fa.getNode(lastIndex);
 
                     let token = null;
-                    if(!node.isSkip()) token = new Token(lexeme, node.getTerminal(), offset);
+                    if (!node.isSkip()) token = new Token(lexeme, node.getTerminal(), offset);
                     return [token, i];
                 }
             } else {
@@ -122,9 +123,9 @@ export class MoonParser {
         let tokens: Token[] = [];
 
         let i = 0;
-        while(i < source.length) {
+        while (i < source.length) {
             let [token, next] = this.tokenizeNext(source, i);
-            if(token !== null) tokens.push(token);
+            if (token !== null) tokens.push(token);
             i = next;
         }
 
@@ -136,30 +137,30 @@ export class MoonParser {
 
         let token = 0;
         let stack: (number | string)[] = [this.startIndex, this.endIndex];
-        while(stack.length > 0) {
+        while (stack.length > 0) {
             let atomIndex = stack.shift();
 
-            if(typeof atomIndex === "string") {
+            if (typeof atomIndex === "string") {
                 derivation.push(new DerivationExit(atomIndex));
                 continue;
             }
 
             let tokenIndex;
-            if(token < tokens.length) tokenIndex = this.terminalAtomIndices[tokens[token].getType()];
+            if (token < tokens.length) tokenIndex = this.terminalAtomIndices[tokens[token].getType()];
             else tokenIndex = this.endIndex;
 
             let atom = this.atoms[atomIndex];
 
-            if(atom instanceof GrammarSymbol) {
+            if (atom instanceof GrammarSymbol) {
                 derivation.push(new DerivationEnter(atom.getSymbol()));
                 let rule = this.parseTable.next(atomIndex, tokenIndex);
-                if(rule == null) throw new Error(`Parsing symbol ${atom} and ${tokens[token]} failed`);
+                if (rule == null) throw new Error(`Parsing symbol ${atom} and ${tokens[token]} failed`);
                 stack = [...rule, atom.getSymbol(), ...stack];
-            } else if(atom instanceof GrammarEnd) {
-                if(tokenIndex != atomIndex) throw new Error("Parsing end failed");
-            } else if(atom instanceof GrammarTerminal) {
+            } else if (atom instanceof GrammarEnd) {
+                if (tokenIndex != atomIndex) throw new Error("Parsing end failed");
+            } else if (atom instanceof GrammarTerminal) {
                 derivation.push(new DerivationToken(tokens[token]));
-                if(tokenIndex != atomIndex) throw new Error(`Parsing ${atom} failed`);
+                if (tokenIndex != atomIndex) throw new Error(`Parsing ${atom} failed`);
                 token += 1;
             }
         }
@@ -169,57 +170,56 @@ export class MoonParser {
 
     private treeify(tokens: Token[]): AST {
         let nodes: ASTNode[] = [new BranchNode("START")];
-        let edges: {[key: number]: number[]} = {};
+        let edges: { [key: number]: number[] } = {};
 
         let derivation = this.parseDerivation(tokens);
 
-        let scopes: {[key: number]: number[]}[] = [{[-1]: []}];
+        let scopes: { [key: number]: number[] }[] = [{ [-1]: [] }];
         let scopeTokens: Token[] = [];
-        for(let entry of derivation) {
-            if(entry instanceof DerivationEnter) {
-                if(!entry.getSymbol().includes("_")) {
-                    scopes.push({[-1]: []});
+        for (let entry of derivation) {
+            if (entry instanceof DerivationEnter) {
+                if (!entry.getSymbol().includes("_")) {
+                    scopes.push({ [-1]: [] });
                     scopeTokens = [];
                 }
             } else if (entry instanceof DerivationToken) {
                 scopeTokens.push(entry.getToken());
-            } else if(entry instanceof DerivationExit) {
+            } else if (entry instanceof DerivationExit) {
                 let currentScope = scopes[scopes.length - 1];
 
-                if(!entry.getSymbol().includes("_")) {
+                if (!entry.getSymbol().includes("_")) {
                     scopes.pop();
 
-                    if(Object.keys(currentScope).length === 1) {
+                    if (Object.keys(currentScope).length === 1) {
                         scopes[scopes.length - 1][-1] = [...scopes[scopes.length - 1][-1], ...currentScope[-1]]
                     } else {
                         let parentIndex = nodes.length;
                         scopes[scopes.length - 1][-1] = [...scopes[scopes.length - 1][-1], parentIndex];
                         nodes.push(new BranchNode(entry.getSymbol()));
                         edges[parentIndex] = [];
-    
-                        for(let [branchName, children] of Object.entries(currentScope)) {
-                            if(parseInt(branchName) === -1) continue;
-    
+
+                        for (let [branchName, children] of Object.entries(currentScope)) {
+                            if (parseInt(branchName) === -1) continue;
+
                             let branchIndex = nodes.length;
                             nodes.push(new BranchNode(branchName));
                             edges[branchIndex] = children;
-    
                             edges[parentIndex].push(branchIndex);
                         }
                     }
 
                     scopeTokens = [];
-                } else if(entry.getSymbol().endsWith("_r")) {
-                    for(let token of scopeTokens) {
+                } else if (entry.getSymbol().endsWith("_r")) {
+                    for (let token of scopeTokens) {
                         currentScope[-1].push(nodes.length);
                         nodes.push(new TokenNode(token));
                     }
                     scopeTokens = [];
-                } else if(entry.getSymbol().includes("_s")) {
+                } else if (entry.getSymbol().includes("_s")) {
                     let symbolSplit = entry.getSymbol().split("_s");
                     let index = parseInt(symbolSplit[symbolSplit.length - 1]);
 
-                    if(currentScope[index] === undefined) {
+                    if (currentScope[index] === undefined) {
                         currentScope[index] = currentScope[-1];
                     } else {
                         currentScope[index] = [...currentScope[index], ...currentScope[-1]];
@@ -246,7 +246,7 @@ export class MoonParser {
 }
 
 class MoonSymbol extends VisitorData {
-    public symbols: {[key: string]: number};
+    public symbols: { [key: string]: number };
 
     constructor() {
         super();
@@ -261,11 +261,11 @@ class MoonSymbol extends VisitorData {
         let otherSet = new Set(Object.keys(other.symbols));
         let intersect = [...Object.keys(this.symbols)].filter(symbol => otherSet.has(symbol));
 
-        if(intersect.length > 0) {
+        if (intersect.length > 0) {
             throw new Error(`Duplicate symbols ${intersect}`);
         }
 
-        this.symbols = {...this.symbols, ...other.symbols};
+        this.symbols = { ...this.symbols, ...other.symbols };
     }
 }
 
@@ -295,7 +295,7 @@ class MoonType extends Visitor<MoonSymbol> {
     protected elseEnter(ast: AST, index: number) {
         let node = ast.node(index);
 
-        if(node instanceof BranchNode && node.getSymbol().startsWith("Instr")) {
+        if (node instanceof BranchNode && node.getSymbol().startsWith("Instr")) {
             this.scope = opFromString(ast.lexeme(ast.child(index, 0)));
         }
     }
@@ -303,10 +303,10 @@ class MoonType extends Visitor<MoonSymbol> {
     protected elseExit(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
         let node = ast.node(index);
 
-        if(node instanceof BranchNode && node.getSymbol().startsWith("Instr")) {
+        if (node instanceof BranchNode && node.getSymbol().startsWith("Instr")) {
             let op = opFromString(ast.lexeme(ast.child(index, 0)));
 
-            switch(op) {
+            switch (op) {
                 case MoonOp.bad:
                 case MoonOp.db:
                 case MoonOp.dw:
@@ -314,7 +314,7 @@ class MoonType extends Visitor<MoonSymbol> {
                 case MoonOp.res:
                     break;
                 case MoonOp.align:
-                    if(this.offset % this.config.addressSize != 0) this.offset += this.config.addressSize - this.offset % this.config.addressSize;
+                    if (this.offset % this.config.addressSize != 0) this.offset += this.config.addressSize - this.offset % this.config.addressSize;
                     break;
                 case MoonOp.entry:
                     break;
@@ -343,7 +343,7 @@ class MoonType extends Visitor<MoonSymbol> {
     protected exitString(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
         let string = ast.lexeme(ast.child(index, 0)).slice(1, -1);
 
-        switch(this.scope) {
+        switch (this.scope) {
             case MoonOp.db:
                 this.offset += string.length;
                 break;
@@ -358,7 +358,7 @@ class MoonType extends Visitor<MoonSymbol> {
     protected exitNumber(ast: AST, index: number, tree: { [key: number]: MoonSymbol; }): MoonSymbol {
         let number = parseInt(ast.lexeme(ast.child(index, 0)));
 
-        switch(this.scope) {
+        switch (this.scope) {
             case MoonOp.db:
                 this.offset += 1;
                 break;
@@ -446,7 +446,7 @@ export class MoonData extends VisitorData {
     }
 
     protected mergeOne<T extends this>(other: T) {
-        if(this.entry === null) this.entry = other.entry;
+        if (this.entry === null) this.entry = other.entry;
         this.registers = [...this.registers, ...other.registers];
         this.bytes = [...this.bytes, ...other.bytes];
         this.words = [...this.words, ...other.words];
@@ -501,7 +501,7 @@ class MoonGenerator extends Visitor<MoonData> {
         let symbol = ast.lexeme(ast.child(index, 0));
         let offset = this.symbols.symbols[symbol];
 
-        if(offset == null) {
+        if (offset == null) {
             throw new Error(`No symbol ${symbol}.`);
         }
 
@@ -514,7 +514,7 @@ class MoonGenerator extends Visitor<MoonData> {
         let data = new MoonData().merge(tree);
 
         let string = ast.lexeme(ast.child(index, 0));
-        for(let i = 1; i < string.length - 1; i++) {
+        for (let i = 1; i < string.length - 1; i++) {
             data.constants.push(string.charCodeAt(i));
         }
 
@@ -534,12 +534,12 @@ class MoonGenerator extends Visitor<MoonData> {
         let data = new MoonData().merge(tree);
 
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
-        switch(op) {
+        switch (op) {
             case MoonOp.entry:
                 data.entry = MoonData.getStaticOffset();
                 break;
             case MoonOp.align:
-                if(MoonData.getStaticOffset() % this.config.addressSize != 0) MoonData.addStaticOffset(this.config.addressSize - MoonData.getStaticOffset() % this.config.addressSize);
+                if (MoonData.getStaticOffset() % this.config.addressSize != 0) MoonData.addStaticOffset(this.config.addressSize - MoonData.getStaticOffset() % this.config.addressSize);
                 break;
             case MoonOp.nop:
             case MoonOp.hlt:
@@ -596,6 +596,11 @@ class MoonGenerator extends Visitor<MoonData> {
         return data;
     }
 
+    protected exitLine(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
+        let data = new MoonData().merge(tree);
+        return data;
+    }
+
     protected exitInstrRwC(ast: AST, index: number, tree: { [key: number]: MoonData; }): MoonData {
         let data = new MoonData().merge(tree);
 
@@ -637,7 +642,7 @@ class MoonGenerator extends Visitor<MoonData> {
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
         let [k] = data.popConstants();
 
-        switch(op) {
+        switch (op) {
             case MoonOp.org:
                 MoonData.addStaticOffset(k);
                 break;
@@ -658,15 +663,15 @@ class MoonGenerator extends Visitor<MoonData> {
         let op = opFromString(ast.lexeme(ast.child(index, 0)));
         let constants = data.popConstants();
 
-        switch(op) {
+        switch (op) {
             case MoonOp.dw:
-                for(let c of constants) {
+                for (let c of constants) {
                     data.words.push([MoonData.getStaticOffset(), c]);
                     MoonData.addStaticOffset(this.config.addressSize);
                 }
                 break;
             case MoonOp.db:
-                for(let c of constants) {
+                for (let c of constants) {
                     data.bytes.push([MoonData.getStaticOffset(), c]);
                     MoonData.addStaticOffset(1);
                 }

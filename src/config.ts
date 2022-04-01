@@ -1,12 +1,12 @@
 interface IConfig {
-    architecture: number 
+    architecture: number
     memory: number
     window: {
-        memory: number 
+        memory: number
         pc: number
     }
     debug: boolean
-    output: "normal" | "escape" 
+    output: "normal" | "escape"
     registers: { [key: string]: string }
 }
 
@@ -25,7 +25,7 @@ const DEFAULT_CONFIG: IConfig = {
 export default class Config {
     private data: IConfig;
     constructor(data: IConfig = null) {
-        if(data == null) {
+        if (data == null) {
             this.data = DEFAULT_CONFIG;
         } else {
             this.data = data;
@@ -74,16 +74,16 @@ export default class Config {
 
     public getRegister(index: number): string {
         let registerString = `r${index}`;
-        if(this.data.registers[registerString]) registerString = this.data.registers[registerString];
+        if (this.data.registers[registerString]) registerString = this.data.registers[registerString];
         return registerString;
     }
 
     public fromRegister(register: string): number {
-        if(!register.startsWith("r")) {
+        if (!register.startsWith("r")) {
             register = Object.fromEntries(Object.entries(this.data.registers).map(r => r.reverse()))[register];
         }
 
-        if(register == undefined) return -1;
+        if (register == undefined) return -1;
         else return parseInt(register.substring(1));
     }
 }
