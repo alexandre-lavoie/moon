@@ -53,7 +53,7 @@ export default class Config {
     }
 
     public get memorySize(): number {
-        return this.data.memory;
+        return this.data.memory * 4;
     }
 
     public get windowMemorySize(): number {
@@ -65,7 +65,7 @@ export default class Config {
     }
 
     public get topAddress(): number {
-        return this.memorySize * 4;
+        return this.memorySize;
     }
 
     public get output(): "normal" | "escape" {
