@@ -305,7 +305,7 @@ export abstract class MoonVM {
         this.enter();
         while (true) {
             if (this.breakpoints.has(this.getPC())) {
-                this.history.push(new InfoModify("Hit breakpoint"));
+                this.history.push(new InfoModify(`Hit breakpoint at ${this.getPC()}`));
                 this.step = true;
             }
 
