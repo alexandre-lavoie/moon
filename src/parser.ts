@@ -416,6 +416,10 @@ export class MoonData extends VisitorData {
         this.innerOffset = MoonData.staticOffset;
     }
 
+    public static setStaticOffset(offset: number) {
+        this.staticOffset = offset;
+    }
+
     public static addStaticOffset(offset: number) {
         this.staticOffset += offset;
     }
@@ -644,7 +648,7 @@ class MoonGenerator extends Visitor<MoonData> {
 
         switch (op) {
             case MoonOp.org:
-                MoonData.addStaticOffset(k);
+                MoonData.setStaticOffset(k);
                 break;
             case MoonOp.res:
                 MoonData.addStaticOffset(k);
