@@ -119,10 +119,6 @@ export abstract class MoonVM {
     private setWord(address: number, word: number, trace: boolean = true): boolean {
         if (trace) this.trace(new WordModify(address, word));
         for (let i = 0; i < this.config.addressSize; i++) this.memory[address + this.config.addressSize - i - 1] = (word >> (i * 8)) & 0xFF;
-        if (trace && address < this.data.offset) {
-            this.history.push(new ErrorModify(`Overwrote instruction at ${address} with ${word}`));
-            return false;
-        }
         return true;
     }
 
@@ -135,10 +131,6 @@ export abstract class MoonVM {
     private setByte(address: number, byte: number, trace: boolean = true): boolean {
         if (trace) this.trace(new ByteModify(address, byte));
         this.memory[address] = byte & 0xFF;
-        if (trace && address < this.data.offset) {
-            this.history.push(new ErrorModify(`Overwrote instruction at ${address} with ${byte}`));
-            return false;
-        }
         return true
     }
 
@@ -155,17 +147,9 @@ export abstract class MoonVM {
                 this.history.push(new ErrorModify(`Bad at ${this.pc}`));
                 return false;
             case MoonOp.lw:
-                if (this.registers[rj] + k < this.data.offset) {
-                    this.history.push(`Read from invalid address ${this.registers[rj] + k}`);
-                    return false;
-                }
                 this.setRegister(ri, this.loadWord(this.registers[rj] + k));
                 break;
             case MoonOp.lb:
-                if (this.registers[rj] + k < this.data.offset) {
-                    this.history.push(`Read from invalid address ${this.registers[rj] + k}`);
-                    return false;
-                }
                 this.setRegister(ri, this.loadByte(this.registers[rj] + k));
                 break;
             case MoonOp.sw:
