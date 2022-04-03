@@ -36,10 +36,12 @@ class NodeMoonVM extends MoonVM {
     }
 
     private showMessage() {
+        if(this.history.length == 0) return;
+
         let reverseHistory = [...this.history].reverse();
 
         let errorCount = 0;
-        reverseHistory.reverse().forEach(entry => {
+        reverseHistory.forEach(entry => {
             if (entry instanceof ErrorModify) {
                 errorCount++;
                 term.table([[`^R${entry.error}^:`]], { contentHasMarkup: true });
@@ -49,6 +51,12 @@ class NodeMoonVM extends MoonVM {
         if (errorCount == 0 && reverseHistory[0] instanceof InfoModify) {
             term.table([[`^B${reverseHistory[0].message}^:`]], { contentHasMarkup: true });
         }
+    }
+
+    protected async warn(message: string) {
+        term.clear();
+        term.table([[`^Y${message}^:`]], { contentHasMarkup: true });
+        await new Promise(resolve => term.inputField((_: any, input: string) => resolve(input)));
     }
 
     private showOutput() {
